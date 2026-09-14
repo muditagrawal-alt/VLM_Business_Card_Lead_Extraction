@@ -1,0 +1,98 @@
+{
+  "01-clean-corporate.jpg": {
+    "first_name": "Priya",
+    "last_name": "Raghavan",
+    "position": "Head of Business Development",
+    "company": "Meridian Logistics",
+    "location": "Mumbai, India",
+    "phone": "+91 98765 43210",
+    "email": "priya.raghavan@meridianlog.com",
+    "website": "meridianlog.com",
+    "_style": "left",
+    "_notes_hint": ""
+  },
+  "02-dark-centred.jpg": {
+    "first_name": "Tomas",
+    "last_name": "Lindqvist",
+    "position": "Chief Technology Officer",
+    "company": "Nordwave Systems",
+    "location": "Stockholm, Sweden",
+    "phone": "+46 70 123 45 67",
+    "email": "t.lindqvist@nordwave.se",
+    "website": "nordwave.se",
+    "_style": "dark-centred",
+    "_notes_hint": ""
+  },
+  "03-no-job-title.jpg": {
+    "first_name": "Marcus",
+    "last_name": "Oyelaran",
+    "position": null,
+    "company": "Oyelaran & Co.",
+    "location": "London, United Kingdom",
+    "phone": "+44 20 7946 0958",
+    "email": "marcus@oyelaran.co.uk",
+    "website": null,
+    "_style": "left",
+    "_notes_hint": "card prints no job title"
+  },
+  "04-initial-only.jpg": {
+    "first_name": "J.",
+    "last_name": "Wehrmann",
+    "position": "Senior Procurement Manager",
+    "company": "Baltrex Industrie GmbH",
+    "location": "Berlin, Germany",
+    "phone": "+49 30 901820",
+    "email": "j.wehrmann@baltrex.de",
+    "website": null,
+    "_style": "minimal",
+    "_notes_hint": "first name is an initial and must not be expanded"
+  },
+  "05-honorific-suffix.jpg": {
+    "first_name": "Eleanor",
+    "last_name": "Whitfield",
+    "position": "Principal Consultant",
+    "company": "Whitfield Advisory",
+    "location": "San Francisco, USA",
+    "phone": "+1 (415) 555-0142",
+    "email": "eleanor@whitfieldadvisory.com",
+    "website": null,
+    "_style": "left",
+    "_notes_hint": "honorific Dr. and suffix PhD belong in notes, not the name fields"
+  },
+  "06-two-people.jpg": {
+    "first_name": "Hiroshi",
+    "last_name": "Tanaka",
+    "position": "Export Director",
+    "company": "Tanaka Seiki Co., Ltd.",
+    "location": "Tokyo, Japan",
+    "phone": "+81 3 5299 1234",
+    "email": "h.tanaka@tanakaseiki.jp",
+    "website": null,
+    "_style": "two-people",
+    "_notes_hint": "second person on the card should be described in notes"
+  },
+  "07-tagline-trap.jpg": {
+    "first_name": "Aisha",
+    "last_name": "Khoury",
+    "position": "Marketing Lead",
+    "company": "Cedarline Foods",
+    "location": "Dubai, United Arab Emirates",
+    "phone": "+971 4 123 4567",
+    "email": "aisha.khoury@cedarline.ae",
+    "website": "cedarline.ae",
+    "_style": "tagline",
+    "_notes_hint": "the slogan must not be read as the company name"
+  },
+  "08-multiple-phones.jpg": {
+    "first_name": "Daniel",
+    "last_name": "Okonkwo",
+    "position": "Operations Manager",
+    "company": "Harmattan Freight",
+    "location": "Lagos, Nigeria",
+    "phone": "+234 803 555 0188",
+    "email": "daniel.okonkwo@harmattan.ng",
+    "website": null,
+    "_style": "multi-contact",
+    "_notes_hint": "mobile must be chosen as the primary phone over office and fax"
+  }
+}
