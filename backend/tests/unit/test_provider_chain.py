@@ -35,7 +35,7 @@ class FakeProvider:
         self.calls = 0
         self.closed = False
 
-    async def extract(self, image_data_url: str) -> VLMResult:  # noqa: ARG002
+    async def extract(self, image_data_url: str) -> VLMResult:
         self.calls += 1
         if self._fail_with is not None:
             raise self._fail_with
@@ -56,8 +56,7 @@ class FakeProvider:
 
 def build_chain(*providers: FakeProvider, threshold: int = 3) -> tuple[ProviderChain, dict]:
     breakers = {
-        p.tier.value: CircuitBreaker(p.tier.value, failure_threshold=threshold)
-        for p in providers
+        p.tier.value: CircuitBreaker(p.tier.value, failure_threshold=threshold) for p in providers
     }
     return ProviderChain(list(providers), breakers), breakers
 
@@ -74,9 +73,7 @@ class TestFallbackOrder:
         assert (gpu.calls, cpu.calls) == (1, 0)
 
     async def test_failure_falls_through_to_the_next_tier(self) -> None:
-        gpu = FakeProvider(
-            ProviderTier.GPU, fail_with=VLMError("gpu down", tier=ProviderTier.GPU)
-        )
+        gpu = FakeProvider(ProviderTier.GPU, fail_with=VLMError("gpu down", tier=ProviderTier.GPU))
         cpu = FakeProvider(ProviderTier.CPU)
         cloud = FakeProvider(ProviderTier.CLOUD)
         chain, _ = build_chain(gpu, cpu, cloud)
@@ -87,12 +84,8 @@ class TestFallbackOrder:
         assert (gpu.calls, cpu.calls, cloud.calls) == (1, 1, 0)
 
     async def test_chain_reaches_the_hosted_tier_when_both_local_tiers_fail(self) -> None:
-        gpu = FakeProvider(
-            ProviderTier.GPU, fail_with=VLMError("gpu down", tier=ProviderTier.GPU)
-        )
-        cpu = FakeProvider(
-            ProviderTier.CPU, fail_with=VLMError("cpu down", tier=ProviderTier.CPU)
-        )
+        gpu = FakeProvider(ProviderTier.GPU, fail_with=VLMError("gpu down", tier=ProviderTier.GPU))
+        cpu = FakeProvider(ProviderTier.CPU, fail_with=VLMError("cpu down", tier=ProviderTier.CPU))
         cloud = FakeProvider(ProviderTier.CLOUD)
         chain, _ = build_chain(gpu, cpu, cloud)
 
@@ -114,9 +107,7 @@ class TestFallbackOrder:
         gpu = FakeProvider(
             ProviderTier.GPU, fail_with=VLMError("gpu timeout", tier=ProviderTier.GPU)
         )
-        cpu = FakeProvider(
-            ProviderTier.CPU, fail_with=VLMError("cpu oom", tier=ProviderTier.CPU)
-        )
+        cpu = FakeProvider(ProviderTier.CPU, fail_with=VLMError("cpu oom", tier=ProviderTier.CPU))
         chain, _ = build_chain(gpu, cpu)
 
         with pytest.raises(AllProvidersFailedError) as exc_info:
@@ -136,9 +127,7 @@ class TestBreakerIntegration:
         timeout before falling through — fifty cards would rediscover the same
         failure fifty times.
         """
-        gpu = FakeProvider(
-            ProviderTier.GPU, fail_with=VLMError("gpu down", tier=ProviderTier.GPU)
-        )
+        gpu = FakeProvider(ProviderTier.GPU, fail_with=VLMError("gpu down", tier=ProviderTier.GPU))
         cpu = FakeProvider(ProviderTier.CPU)
         chain, breakers = build_chain(gpu, cpu, threshold=3)
 

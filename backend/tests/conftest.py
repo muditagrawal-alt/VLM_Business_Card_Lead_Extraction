@@ -7,7 +7,7 @@ claiming, JSONB querying) is covered by the integration tests instead.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 import pytest_asyncio
@@ -54,3 +54,67 @@ async def session() -> AsyncIterator[AsyncSession]:
         yield s
 
     await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def api(session: AsyncSession) -> AsyncIterator[tuple[object, AsyncSession]]:
+    """An app wired to the test session, with storage in a temp directory.
+
+    The provider chain is not started: these tests exercise the HTTP layer and
+    the database, while extraction itself is covered by the worker and chain
+    tests. A card therefore stays queued, which is exactly the state the
+    progress endpoint has to render.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from httpx import ASGITransport, AsyncClient
+
+    from app.api.deps import get_chain, get_storage
+    from app.config import Settings
+    from app.core.db import get_session
+    from app.core.rate_limit import limiter
+    from app.main import create_app
+    from app.services.storage import LocalDiskStorage
+
+    # Rate limiting is real production behaviour, but shared per-IP state
+    # across tests would make results depend on execution order. It has its
+    # own dedicated test.
+    limiter.enabled = False
+
+    settings = Settings(
+        app_env="development",
+        database_url="sqlite+aiosqlite:///:memory:",
+        vlm_cloud_api_key="",
+    )
+    app = create_app(settings)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        storage = LocalDiskStorage(Path(tmp))
+
+        async def _session_override() -> AsyncIterator[AsyncSession]:
+            yield session
+            await session.flush()
+
+        app.dependency_overrides[get_session] = _session_override
+        app.dependency_overrides[get_storage] = lambda: storage
+        app.dependency_overrides[get_chain] = lambda: _StubChain()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client, session
+
+
+class _StubChain:
+    """Stands in for the provider chain in HTTP-level tests."""
+
+    tiers: ClassVar[list[str]] = ["gpu", "cpu"]
+
+    async def health(self) -> dict[str, bool]:
+        return {"gpu": True, "cpu": True}
+
+    def breaker_snapshot(self) -> list[dict[str, object]]:
+        return [{"tier": "gpu", "state": "closed", "consecutive_failures": 0}]
+
+    async def aclose(self) -> None:
+        return None
