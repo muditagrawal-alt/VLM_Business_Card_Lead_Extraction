@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+
+/* Design tokens — a dense, neutral business-tool palette with one accent. */
+@theme {
+  --color-accent-50: oklch(0.97 0.02 250);
+  --color-accent-100: oklch(0.93 0.04 250);
+  --color-accent-500: oklch(0.55 0.18 255);
+  --color-accent-600: oklch(0.48 0.18 255);
+  --color-accent-700: oklch(0.41 0.16 255);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-neutral-50 text-neutral-900 antialiased;
+}
+
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
