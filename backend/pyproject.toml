@@ -1,0 +1,116 @@
+[project]
+name = "vlm-lead-extraction"
+version = "1.0.0"
+description = "Bulk business card lead extraction using a self-hosted Qwen Vision-Language Model"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "MIT" }
+
+dependencies = [
+    # ---- Web framework ----
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.17",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+
+    # ---- Database ----
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "greenlet>=3.1.0",
+
+    # ---- HTTP client (VLM providers) ----
+    "httpx>=0.28.0",
+    "tenacity>=9.0.0",
+
+    # ---- Image handling ----
+    "pillow>=11.0.0",
+    "pillow-heif>=0.20.0",
+
+    # ---- Field normalisation / validation ----
+    "phonenumbers>=8.13.50",
+    "email-validator>=2.2.0",
+    "nameparser>=1.1.3",
+
+    # ---- Excel / CSV export ----
+    "openpyxl>=3.1.5",
+
+    # ---- Observability & protection ----
+    "structlog>=24.4.0",
+    "slowapi>=0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "respx>=0.21.1",
+    "aiosqlite>=0.20.0",
+    "ruff>=0.8.0",
+    "pyright>=1.1.390",
+    "types-openpyxl>=3.1.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ============================================================
+# Ruff — lint + format
+# ============================================================
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "A",         # builtins shadowing
+    "C4",        # comprehensions
+    "SIM",       # simplify
+    "TCH",       # type-checking imports
+    "RUF",       # ruff-specific
+    "ASYNC",     # async correctness
+    "S",         # bandit security
+]
+ignore = [
+    "S101",      # assert — used in tests
+    "B008",      # function call in default arg — FastAPI Depends idiom
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S311"]
+"alembic/**" = ["E501", "N999"]
+
+# ============================================================
+# Pyright — static types
+# ============================================================
+[tool.pyright]
+include = ["app"]
+exclude = ["**/__pycache__", "alembic/versions"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+
+# ============================================================
+# Pytest
+# ============================================================
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "model: hits a real VLM provider (deselect with -m 'not model')",
+    "integration: needs a database",
+]
