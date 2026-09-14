@@ -20,6 +20,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import PhoneType
 
+# Excluded from the grammar's required set: notes is commentary, not data, and
+# forcing the model to fill it invites it to write something.
+_OPTIONAL_IN_GRAMMAR = frozenset({"notes"})
+
 
 class PhoneEntry(BaseModel):
     """A phone number exactly as printed, with its label if the card gives one."""
@@ -70,19 +74,28 @@ class CardExtraction(BaseModel):
     )
 
     first_name: str | None = Field(
-        default=None, description="Given name only, without any honorific or title."
+        default=None,
+        max_length=128,
+        description="Given name only, without any honorific or title.",
     )
     last_name: str | None = Field(
-        default=None, description="Family name only, without any suffix such as Jr or PhD."
+        default=None,
+        max_length=128,
+        description="Family name only, without any suffix such as Jr or PhD.",
     )
     full_name_as_printed: str | None = Field(
         default=None,
+        max_length=256,
         description="The person's name exactly as it appears, including any honorific.",
     )
     position: str | None = Field(
-        default=None, description="Job title or role, for example 'Head of Sales'."
+        default=None,
+        max_length=256,
+        description="Job title or role, for example 'Head of Sales'.",
     )
-    company: str | None = Field(default=None, description="Organisation or company name.")
+    company: str | None = Field(
+        default=None, max_length=256, description="Organisation or company name."
+    )
 
     emails: list[str] = Field(
         default_factory=list, description="Every email address printed on the card."
@@ -91,14 +104,20 @@ class CardExtraction(BaseModel):
         default_factory=list, description="Every phone number printed on the card."
     )
     website: str | None = Field(
-        default=None, description="Website or domain, excluding social media handles."
+        default=None,
+        max_length=512,
+        description="Website or domain, excluding social media handles.",
     )
     address: PostalAddress = Field(
         default_factory=PostalAddress, description="The postal address, split into parts."
     )
 
+    # Capped tightly and declared last. Left unbounded and free-form, a small
+    # model degenerates into a repetition loop here, burning the whole token
+    # budget and losing the fields that actually matter.
     notes: str | None = Field(
         default=None,
+        max_length=400,
         description=(
             "Anything a reviewer should know: a second person on the card, "
             "unreadable text, or an honorific and suffix that were removed "
@@ -110,9 +129,25 @@ class CardExtraction(BaseModel):
     def grammar_schema(cls) -> dict[str, object]:
         """JSON schema for constrained decoding.
 
-        Pydantic emits `$defs` with `$ref` indirection, which llama.cpp's
-        grammar converter handles, but hosted providers are inconsistent about.
-        The schema is therefore flattened so one payload works everywhere.
+        This diverges from the validation schema in two deliberate ways.
+
+        First, `$defs`/`$ref` indirection is inlined. llama.cpp handles
+        references, but hosted providers are inconsistent about them, so one
+        flattened payload works everywhere.
+
+        Second, every field except `notes` is marked required. Pydantic makes a
+        defaulted field optional, and an optional property in a grammar is one
+        the model may simply skip — observed in practice, with a 4B model
+        emitting `raw_text`, then `company`, then jumping straight to `notes`
+        and omitting the name, position, email and phone entirely. Because each
+        field also permits null, "required" here means the model must *answer*
+        for every field, and an explicit null is a valid answer. The defaults
+        are stripped for the same reason: a default is a signal that the
+        property can be left out.
+
+        Validation stays lenient (see the field defaults above), so a hosted
+        provider returning a partial object is still accepted rather than
+        discarded.
         """
         schema = cls.model_json_schema()
         defs = schema.pop("$defs", {})
@@ -129,4 +164,36 @@ class CardExtraction(BaseModel):
                 return [inline(item) for item in node]
             return node
 
-        return inline(schema)  # type: ignore[return-value]
+        resolved = inline(schema)
+        if isinstance(resolved, dict):
+            _require_all_properties(resolved, _OPTIONAL_IN_GRAMMAR)
+        return resolved  # type: ignore[return-value]
+
+
+def _require_all_properties(node: dict[str, object], optional: frozenset[str]) -> None:
+    """Mark every property of every object in the schema as required.
+
+    Applied recursively so nested objects (the postal address, each phone
+    entry) are covered too: a partially emitted address is the same failure as
+    a partially emitted card.
+    """
+    properties = node.get("properties")
+    if isinstance(properties, dict):
+        node["required"] = [name for name in properties if name not in optional]
+        node["additionalProperties"] = False
+        for child in properties.values():
+            if isinstance(child, dict):
+                child.pop("default", None)
+                _require_all_properties(child, optional)
+
+    # Recurse through the containers a JSON schema can nest objects in.
+    for key in ("items", "prefixItems"):
+        child = node.get(key)
+        if isinstance(child, dict):
+            _require_all_properties(child, optional)
+    for key in ("anyOf", "oneOf", "allOf"):
+        branches = node.get(key)
+        if isinstance(branches, list):
+            for branch in branches:
+                if isinstance(branch, dict):
+                    _require_all_properties(branch, optional)

@@ -40,7 +40,11 @@ _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 # Deterministic decoding: transcription has one correct answer, so sampling
 # variety is pure downside.
 _TEMPERATURE = 0.0
-_MAX_TOKENS = 1536
+# Budget enough for a full verbatim transcription plus every structured field.
+# At 1536 the model ran out mid-object on dense cards; grammar-constrained
+# decoding then closes the JSON with nulls, so the cards that needed the most
+# reading silently lost their contact details instead of failing loudly.
+_MAX_TOKENS = 3072
 
 
 class OpenAICompatProvider:
