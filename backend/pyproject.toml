@@ -89,9 +89,27 @@ ignore = [
     "B008",      # function call in default arg — FastAPI Depends idiom
 ]
 
+# Pydantic evaluates annotations at runtime, so its models must keep real
+# imports rather than TYPE_CHECKING ones.
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S105", "S106", "S311"]
-"alembic/**" = ["E501", "N999"]
+# SQLAlchemy resolves Mapped[...] annotations at runtime: stdlib types such as
+# uuid and datetime must stay as real imports, while relationship targets are
+# resolved from the declarative registry and are kept behind TYPE_CHECKING to
+# avoid import cycles between the model modules.
+"app/models/**" = ["TC003"]
+# Alembic revisions are generated; their import layout is not ours to police.
+"alembic/versions/**" = ["E501", "N999", "TC003", "I001"]
+"alembic/env.py" = ["E501"]
 
 # ============================================================
 # Pyright — static types
