@@ -33,7 +33,12 @@ def configure_logging(level: str = "INFO", *, json_output: bool = False) -> None
     structlog.configure(
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        # A stdlib-backed factory, not PrintLoggerFactory: the stdlib
+        # processors above read `logger.name`, which a PrintLogger does not
+        # have. Pairing them raised AttributeError from inside the global
+        # exception handler, turning a handled 500 into an unhandled one.
+        # This also routes uvicorn and SQLAlchemy through the same handler.
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 
