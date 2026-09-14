@@ -1,0 +1,28 @@
+# Local development infrastructure.
+# The API, worker and frontend run on the host (fast reload); only stateful
+# services live in containers. Production uses docker-compose.prod.yml.
+name: vlm-leads-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-leads}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leads}
+      POSTGRES_DB: ${POSTGRES_DB:-leads}
+    ports:
+      # 5433 on the host: a locally installed PostgreSQL commonly occupies
+      # 5432 and would silently win the connection, so the dev container is
+      # published on a port of its own.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leads} -d ${POSTGRES_DB:-leads}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
