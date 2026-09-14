@@ -6,10 +6,10 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import Enum, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, JSONColumn, TimestampMixin, UUIDPrimaryKey
+from app.models.base import Base, JSONColumn, TimestampMixin, UTCDateTime, UUIDPrimaryKey
 from app.models.enums import OutputMode, ProviderTier, TaskStatus
 
 if TYPE_CHECKING:
@@ -49,7 +49,7 @@ class Task(Base, UUIDPrimaryKey, TimestampMixin):
     attempts: Mapped[int] = mapped_column(
         Integer, default=0, server_default=text("0"), nullable=False
     )
-    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     # Which tier answered, and how. Surfaced in the UI and the Excel summary
     # so results are never presented as if all cards took the same path.
@@ -66,7 +66,7 @@ class Task(Base, UUIDPrimaryKey, TimestampMixin):
     # normalisation layer without paying for inference again.
     raw_response: Mapped[dict[str, Any] | None] = mapped_column(JSONColumn, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     job: Mapped[Job] = relationship(back_populates="tasks")
     image: Mapped[Image] = relationship(back_populates="tasks")

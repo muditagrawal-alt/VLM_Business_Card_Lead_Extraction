@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, Integer, String, text
+from sqlalchemy import Enum, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKey
+from app.models.base import Base, TimestampMixin, UTCDateTime, UUIDPrimaryKey
 from app.models.enums import JobStatus
 
 if TYPE_CHECKING:
@@ -44,9 +44,7 @@ class Job(Base, UUIDPrimaryKey, TimestampMixin):
     client_ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Retention sweep deletes the job and cascades to tasks, leads and images.
-    expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
-    )
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True, index=True)
 
     tasks: Mapped[list[Task]] = relationship(
         back_populates="job", cascade="all, delete-orphan", passive_deletes=True
