@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { cn } from './utils';
 
 describe('cn', () => {
-  it('merges conditional classes', () => {
-    expect(cn('a', false && 'b', 'c')).toBe('a c');
+  it('drops falsy conditional classes', () => {
+    const active = false;
+    expect(cn('a', active && 'b', 'c')).toBe('a c');
   });
 
   it('lets a later Tailwind utility win', () => {
