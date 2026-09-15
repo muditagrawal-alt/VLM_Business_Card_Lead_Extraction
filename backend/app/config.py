@@ -59,13 +59,13 @@ class Settings(BaseSettings):
 
     # ---- Tier 1: GPU (llama.cpp CUDA/Metal) ----
     vlm_gpu_enabled: bool = True
-    vlm_gpu_base_url: str = "http://localhost:8080/v1"
+    vlm_gpu_base_url: str = "http://127.0.0.1:18080/v1"
     vlm_gpu_model: str = "Qwen3VL-8B-Instruct-Q8_0"
     vlm_gpu_timeout_s: float = 60.0
 
     # ---- Tier 2: CPU (llama.cpp CPU build) ----
     vlm_cpu_enabled: bool = True
-    vlm_cpu_base_url: str = "http://localhost:8081/v1"
+    vlm_cpu_base_url: str = "http://127.0.0.1:18081/v1"
     vlm_cpu_model: str = "Qwen3VL-4B-Instruct-Q4_K_M"
     vlm_cpu_timeout_s: float = 180.0
 

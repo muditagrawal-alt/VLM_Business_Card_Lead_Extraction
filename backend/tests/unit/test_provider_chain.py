@@ -103,6 +103,23 @@ class TestFallbackOrder:
 
         assert result.tier is ProviderTier.CPU
 
+    async def test_a_tier_is_named_once_not_twice(self) -> None:
+        """The chain labels each attempt, so the provider must not also.
+
+        Both did, producing "cpu: cpu: transport failure: ..." in the UI.
+        """
+        gpu = FakeProvider(
+            ProviderTier.GPU,
+            fail_with=VLMError("transport failure: refused", tier=ProviderTier.GPU),
+        )
+        chain, _ = build_chain(gpu)
+
+        with pytest.raises(AllProvidersFailedError) as exc_info:
+            await chain.extract("data:image/jpeg;base64,x")
+
+        assert "gpu: gpu:" not in str(exc_info.value)
+        assert "gpu: transport failure: refused" in str(exc_info.value)
+
     async def test_every_tier_failing_reports_each_reason(self) -> None:
         gpu = FakeProvider(
             ProviderTier.GPU, fail_with=VLMError("gpu timeout", tier=ProviderTier.GPU)

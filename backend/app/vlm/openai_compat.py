@@ -115,7 +115,9 @@ class OpenAICompatProvider:
             except (httpx.TimeoutException, httpx.ConnectError) as exc:
                 # A transport failure will not be fixed by a weaker output
                 # format, so stop and let the chain fall to the next tier.
-                raise VLMError(f"{self.tier}: transport failure: {exc}", tier=self.tier) from exc
+                # The tier is carried on the exception and applied as a label
+                # by the chain, so including it here would read "cpu: cpu: ...".
+                raise VLMError(f"transport failure: {exc}", tier=self.tier) from exc
             except (ValidationError, ValueError, KeyError) as exc:
                 last_error = exc
                 log.warning(
@@ -133,7 +135,7 @@ class OpenAICompatProvider:
                     log.warning("response_format_rejected", tier=self.tier.value, mode=mode.value)
                     continue
                 raise VLMError(
-                    f"{self.tier}: HTTP {status}",
+                    f"HTTP {status}",
                     tier=self.tier,
                     retryable=status >= httpx.codes.INTERNAL_SERVER_ERROR
                     or status == httpx.codes.TOO_MANY_REQUESTS,
@@ -153,7 +155,7 @@ class OpenAICompatProvider:
             )
 
         raise VLMError(
-            f"{self.tier}: no valid extraction ({type(last_error).__name__}: {last_error})",
+            f"no valid extraction ({type(last_error).__name__}: {last_error})",
             tier=self.tier,
         )
 

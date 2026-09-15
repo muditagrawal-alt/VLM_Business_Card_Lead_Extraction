@@ -33,14 +33,14 @@ models: ## Download Qwen3-VL GGUF weights (~13 GB; TIERS=cpu for just the 4B)
 
 # ---------------- local inference ----------------
 .PHONY: llama-gpu
-llama-gpu: ## Serve Qwen3-VL-8B on port 8080 (Metal locally / CUDA in prod)
+llama-gpu: ## Serve Qwen3-VL-8B on 127.0.0.1:18080 (Metal locally)
 	llama-server -m $(LLAMA_8B) --mmproj $(MMPROJ_8B) \
-		-ngl 99 -c 8192 --parallel 2 --jinja --host 0.0.0.0 --port 8080
+		-ngl 99 -c 8192 --parallel 2 --jinja --host 127.0.0.1 --port 18080
 
 .PHONY: llama-cpu
-llama-cpu: ## Serve Qwen3-VL-4B on port 8081 (CPU fallback tier)
+llama-cpu: ## Serve Qwen3-VL-4B on 127.0.0.1:18081 (fallback tier)
 	llama-server -m $(LLAMA_4B) --mmproj $(MMPROJ_4B) \
-		-ngl 0 -c 4096 --parallel 1 --jinja --host 0.0.0.0 --port 8081
+		-ngl 0 -c 4096 --parallel 1 --jinja --host 127.0.0.1 --port 18081
 
 # ---------------- dev ----------------
 .PHONY: dev
