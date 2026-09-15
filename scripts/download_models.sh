@@ -30,21 +30,40 @@ mkdir -p "$MODELS_DIR"
 # the classic HTTP path is what survives an unattended boot.
 export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
 
+# Falls back to curl because the library client proved unable to finish a
+# 1.1 GB file on a lossy connection: it died with repeated connection resets
+# and, worse, once hung with the socket open delivering nothing, which no
+# amount of retrying detects. curl resumes byte-exactly and can be told to
+# treat a stalled transfer as a failure.
 fetch() {
   local repo="$1" file="$2" attempt
   if [[ -f "$MODELS_DIR/$file" ]]; then
     echo "==> $file already present, skipping"
     return 0
   fi
+
   for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
     echo "==> $file (attempt $attempt/$MAX_ATTEMPTS)"
     if hf download "$repo" "$file" --local-dir "$MODELS_DIR"; then
       return 0
     fi
-    echo "    transfer failed; retrying in $(( attempt * 10 ))s" >&2
+    echo "    library transfer failed; retrying in $(( attempt * 10 ))s" >&2
     sleep $(( attempt * 10 ))
   done
-  echo "error: could not download $file after $MAX_ATTEMPTS attempts" >&2
+
+  echo "==> falling back to curl for $file" >&2
+  local url="https://huggingface.co/${repo}/resolve/main/${file}"
+  for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
+    # --speed-limit with --speed-time aborts a transfer that drops below
+    # 50 KB/s for 30 seconds; -C - then resumes from what is on disk.
+    if curl -L --fail --retry 3 --retry-all-errors --retry-delay 5             --connect-timeout 20 --speed-limit 51200 --speed-time 30             -C - -o "$MODELS_DIR/$file" "$url"; then
+      return 0
+    fi
+    echo "    curl attempt $attempt failed; resuming shortly" >&2
+    sleep $(( attempt * 5 ))
+  done
+
+  echo "error: could not download $file after $(( MAX_ATTEMPTS * 2 )) attempts" >&2
   return 1
 }
 
