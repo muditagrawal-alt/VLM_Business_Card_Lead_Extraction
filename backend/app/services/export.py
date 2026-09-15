@@ -86,6 +86,23 @@ def _mean_confidence(lead: Lead) -> float | None:
     return sum(present) / len(present) if present else None
 
 
+def _has_flagged_field(lead: Lead) -> bool:
+    """True when any single field is below the review threshold.
+
+    The summary counts rows this way rather than by mean confidence. A card
+    with six confident fields and one doubtful one averages comfortably above
+    the threshold, so a mean-based count reported "0 flagged" while a cell was
+    visibly shaded amber — telling the reader the opposite of what the sheet
+    showed.
+    """
+    if not lead.confidence:
+        return False
+    return any(
+        (score := lead.confidence.get(field)) is not None and score < LOW_CONFIDENCE
+        for field in SCORED_FIELDS
+    )
+
+
 def _cell_values(lead: Lead, index: int, filenames: dict[UUID, str]) -> dict[str, CellValue]:
     mean = _mean_confidence(lead)
     return {
@@ -184,17 +201,13 @@ def _add_summary(
         if task.model:
             models.add(task.model)
 
-    low_confidence = sum(
-        1
-        for lead in leads
-        if (mean := _mean_confidence(lead)) is not None and mean < LOW_CONFIDENCE
-    )
+    low_confidence = sum(1 for lead in leads if _has_flagged_field(lead))
 
     rows: list[tuple[str, CellValue]] = [
         ("Job", str(job_id)),
         ("Exported at (UTC)", datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")),
         ("Leads", len(leads)),
-        ("Flagged for review", low_confidence),
+        ("Rows with a field to check", low_confidence),
         ("Duplicates flagged", sum(1 for lead in leads if lead.is_duplicate_of)),
         ("Models used", ", ".join(sorted(models)) or "-"),
         (
