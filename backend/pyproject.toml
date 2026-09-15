@@ -107,6 +107,11 @@ runtime-evaluated-base-classes = [
 # resolved from the declarative registry and are kept behind TYPE_CHECKING to
 # avoid import cycles between the model modules.
 "app/models/**" = ["TC003"]
+# FastAPI reads route annotations at runtime to resolve dependencies and
+# coerce path and query parameters. Moving them into a TYPE_CHECKING block
+# would leave the framework unable to build the dependency graph, so the
+# type-checking rules do not apply to the HTTP layer.
+"app/api/**" = ["TC001", "TC002", "TC003"]
 # Alembic revisions are generated; their import layout is not ours to police.
 "alembic/versions/**" = ["E501", "N999", "TC003", "I001"]
 "alembic/env.py" = ["E501"]
