@@ -9,6 +9,7 @@ from app.schemas.extraction import CardExtraction, PhoneEntry, PostalAddress
 from app.services.normalisation import (
     PhoneValidity,
     build_location,
+    infer_region,
     normalise,
     normalise_email,
     normalise_phone,
@@ -258,3 +259,111 @@ class TestPlaceholderRejection:
         """Small models sometimes write a placeholder instead of omitting."""
         lead = normalise(CardExtraction(raw_text="x", company=placeholder))
         assert lead.company is None
+
+
+class TestRegionInference:
+    """Working out the card's country without a printed country name.
+
+    These cases come from real cards: Indian business cards routinely print a
+    bare ten-digit mobile and never name the country.
+    """
+
+    def test_no_country_is_ever_invented(self) -> None:
+        """A bare national number must not acquire a guessed country code.
+
+        An earlier version fell back to "US", turning the Indian mobile
+        7055559999 into +17055559999 and reporting it VALID — a real North
+        American number, undialable for this contact, presented with full
+        confidence. A plausible wrong number is worse than none.
+        """
+        parsed = parse_phone("7055559999", region=None)
+        assert parsed is not None
+        assert parsed.value == "7055559999"
+        assert parsed.validity is PhoneValidity.UNPARSED
+
+    def test_region_comes_from_a_sibling_international_number(self) -> None:
+        """One number in full international form resolves all the others."""
+        card = CardExtraction(
+            raw_text="+91 7055559999, 9013933333",
+            phones=[
+                PhoneEntry(number="+91 7055559999", type=PhoneType.MOBILE),
+                PhoneEntry(number="9013933333", type=PhoneType.OFFICE),
+            ],
+        )
+        assert infer_region(card, None) == "IN"
+        lead = normalise(card)
+        assert lead.phone == "+917055559999"
+        assert [e["number"] for e in lead.extra_phones] == ["+919013933333"]
+
+    def test_region_comes_from_a_country_code_domain(self) -> None:
+        card = CardExtraction(
+            raw_text="rohit@sinrachna.in 9013933333",
+            emails=["rohit@sinrachna.in"],
+            phones=[PhoneEntry(number="9013933333", type=PhoneType.MOBILE)],
+        )
+        assert infer_region(card, None) == "IN"
+        assert normalise(card).phone == "+919013933333"
+
+    def test_a_generic_domain_implies_no_country(self) -> None:
+        """.com says nothing about where a company is."""
+        card = CardExtraction(raw_text="x", emails=["someone@example.com"])
+        assert infer_region(card, None) is None
+
+    def test_a_printed_country_wins_over_other_signals(self) -> None:
+        card = CardExtraction(
+            raw_text="x",
+            emails=["someone@example.in"],
+            address=PostalAddress(country="Germany"),
+        )
+        assert infer_region(card, "Germany") == "DE"
+
+
+class TestGrounding:
+    def test_a_value_printed_across_two_lines_is_still_grounded(self) -> None:
+        """Cards break long company names over two lines.
+
+        Comparing without collapsing whitespace flagged correctly extracted
+        companies as doubtful, which is how this was found.
+        """
+        lead = normalise(
+            CardExtraction(
+                raw_text='CORATIA\nTECHNOLOGIES\n"Underwater Robotic Inspection"',
+                company="CORATIA TECHNOLOGIES",
+            )
+        )
+        assert lead.confidence["company"] == 1.0
+
+    def test_location_is_scored_by_its_parts(self) -> None:
+        """Location is assembled, so it is never printed in its stored form.
+
+        A card shows "New Delhi - 110016", never "New Delhi, India". Scoring
+        the joined string flagged every correct location as doubtful.
+        """
+        lead = normalise(
+            CardExtraction(
+                raw_text="R&I Park, IIT Delhi, Hauz Khas, New Delhi - 110016",
+                address=PostalAddress(city="New Delhi", country="India", postal_code="110016"),
+            )
+        )
+        assert lead.location == "New Delhi, India"
+        # City printed, country inferred: normal, and not worth flagging.
+        assert lead.confidence["location"] == pytest.approx(0.9)
+
+    def test_location_with_every_part_printed_scores_full(self) -> None:
+        lead = normalise(
+            CardExtraction(
+                raw_text="Mumbai, India",
+                address=PostalAddress(city="Mumbai", country="India"),
+            )
+        )
+        assert lead.confidence["location"] == 1.0
+
+    def test_a_location_absent_from_the_card_is_still_flagged(self) -> None:
+        """The check must keep catching an invented place."""
+        lead = normalise(
+            CardExtraction(
+                raw_text="no place names on this card",
+                address=PostalAddress(city="Atlantis", country="Nowhere"),
+            )
+        )
+        assert lead.confidence["location"] < 0.8

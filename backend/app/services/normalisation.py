@@ -88,6 +88,55 @@ _COUNTRY_TO_REGION: dict[str, str] = {
     "sri lanka": "LK",
 }
 
+# Country-code top-level domains worth recognising. Deliberately excludes
+# generic domains (.com, .org) which say nothing about a country.
+_TLD_TO_REGION: dict[str, str] = {
+    "in": "IN",
+    "uk": "GB",
+    "de": "DE",
+    "fr": "FR",
+    "es": "ES",
+    "it": "IT",
+    "nl": "NL",
+    "se": "SE",
+    "no": "NO",
+    "dk": "DK",
+    "fi": "FI",
+    "pl": "PL",
+    "ch": "CH",
+    "at": "AT",
+    "be": "BE",
+    "ie": "IE",
+    "pt": "PT",
+    "jp": "JP",
+    "cn": "CN",
+    "sg": "SG",
+    "hk": "HK",
+    "kr": "KR",
+    "au": "AU",
+    "nz": "NZ",
+    "ca": "CA",
+    "br": "BR",
+    "mx": "MX",
+    "za": "ZA",
+    "ng": "NG",
+    "ke": "KE",
+    "eg": "EG",
+    "ae": "AE",
+    "sa": "SA",
+    "qa": "QA",
+    "il": "IL",
+    "tr": "TR",
+    "id": "ID",
+    "my": "MY",
+    "th": "TH",
+    "vn": "VN",
+    "ph": "PH",
+    "pk": "PK",
+    "bd": "BD",
+    "lk": "LK",
+}
+
 # Titles and suffixes the model is told to move into notes, removed here as a
 # second line of defence when it leaves them in the name fields.
 _HONORIFICS = {
@@ -217,21 +266,25 @@ def region_for_country(country: str | None) -> str | None:
 def parse_phone(raw: str | None, *, region: str | None = None) -> ParsedPhone | None:
     """Parse a printed number into E.164 where possible.
 
-    Tries the country hint from the card's address first, then the number on
-    its own (which works whenever a '+' prefix is present), then a US region as
-    a last resort for bare local numbers.
+    The number is tried against the region hint derived from the card, and on
+    its own, which succeeds whenever an international '+' prefix is present.
 
-    A number that parses but only satisfies `is_possible_number` is still
-    returned, marked POSSIBLE. One that cannot be parsed at all is returned
-    verbatim and marked UNPARSED, so nothing printed on the card is thrown
-    away; the caller decides what is fit to be the primary phone.
+    **No region is ever guessed.** An earlier version fell back to "US" for
+    bare national numbers, which turned the Indian mobile 7055559999 into
+    +17055559999 and reported it as VALID — a real North American number,
+    undialable for this contact, presented with full confidence. Producing a
+    plausible wrong number is worse than producing none, so a bare national
+    number with no hint is kept verbatim and marked UNPARSED instead.
+
+    A number that parses but only satisfies `is_possible_number` is returned
+    marked POSSIBLE, because libphonenumber's metadata lags real allocations.
     """
     cleaned = _clean(raw)
     if cleaned is None:
         return None
 
     best: ParsedPhone | None = None
-    for candidate_region in (region, None, "US"):
+    for candidate_region in (region, None):
         try:
             parsed = phonenumbers.parse(cleaned, candidate_region)
         except phonenumbers.NumberParseException:
@@ -243,6 +296,44 @@ def parse_phone(raw: str | None, *, region: str | None = None) -> ParsedPhone | 
             best = ParsedPhone(e164, PhoneValidity.POSSIBLE)
 
     return best or ParsedPhone(cleaned, PhoneValidity.UNPARSED)
+
+
+def infer_region(extraction: CardExtraction, address_country: str | None) -> str | None:
+    """Work out the card's country from the card itself.
+
+    Preference order: the printed country, then the calling code of any number
+    that carries an international prefix, then the country implied by a
+    national-domain email or website. A card rarely prints its own country, but
+    it very often prints one number in full international form — which is
+    enough to resolve every other number on it.
+    """
+    from_address = region_for_country(address_country)
+    if from_address:
+        return from_address
+
+    # A sibling number in international form tells us the country directly.
+    for entry in extraction.phones:
+        candidate = _clean(entry.number)
+        if not candidate or not candidate.lstrip().startswith("+"):
+            continue
+        try:
+            parsed = phonenumbers.parse(candidate, None)
+        except phonenumbers.NumberParseException:
+            continue
+        code = phonenumbers.region_code_for_number(parsed)
+        if code:
+            return code
+
+    # Country-code top-level domains are a weaker but useful signal.
+    for text in (*extraction.emails, extraction.website or ""):
+        tld = _clean(text)
+        if not tld or "." not in tld:
+            continue
+        suffix = tld.rsplit(".", 1)[-1].lower()
+        if suffix in _TLD_TO_REGION:
+            return _TLD_TO_REGION[suffix]
+
+    return None
 
 
 def normalise_phone(raw: str | None, *, region: str | None = None) -> str | None:
@@ -358,7 +449,10 @@ def normalise(extraction: CardExtraction) -> NormalisedLead:
         "country": _clean(address_raw.country),
         "postal_code": _clean(address_raw.postal_code),
     }
-    region = region_for_country(address["country"])
+    # Inferred from the whole card, not just the printed country: most cards
+    # never state their country but do print one number in full international
+    # form, which resolves every other number on the card.
+    region = infer_region(extraction, address["country"])
 
     first_name, last_name = split_name(
         extraction.first_name, extraction.last_name, extraction.full_name_as_printed
@@ -397,24 +491,38 @@ def normalise(extraction: CardExtraction) -> NormalisedLead:
     return lead
 
 
+def _comparable(text: str | None) -> str:
+    """Fold case and collapse every run of whitespace to a single space.
+
+    Grounding compares a normalised field against the model's transcription.
+    Without collapsing whitespace the two never match when a card prints a
+    value across two lines: "CORATIA\nTECHNOLOGIES" in the transcription
+    against "CORATIA TECHNOLOGIES" in the field, which flagged correctly
+    extracted companies as doubtful.
+    """
+    if not text:
+        return ""
+    return " ".join(text.split()).casefold()
+
+
 def score_confidence(lead: NormalisedLead, extraction: CardExtraction) -> dict[str, float]:
-    """Heuristic per-field confidence driving the amber flags in the UI.
+    """Heuristic per-field confidence driving the review flags in the UI.
 
     This is not a model probability. It answers a narrower, more useful
     question: did the value survive validation, and does it appear in the text
     the model transcribed? A value the model invented usually fails the second
     test.
     """
-    haystack = (extraction.raw_text or "").casefold()
+    haystack = _comparable(extraction.raw_text)
     scores: dict[str, float] = {}
 
     def grounded(value: str | None, *, validated: bool = False) -> float:
         if value is None:
             return 0.0
-        # A validated phone or email is trustworthy even if reformatting means
-        # it no longer matches the transcription character for character.
+        # A validated phone or email is trustworthy even when reformatting
+        # means it no longer matches the transcription character for character.
         base = 0.9 if validated else 0.6
-        if haystack and value.casefold() in haystack:
+        if haystack and _comparable(value) in haystack:
             return 1.0
         return base
 
@@ -422,15 +530,44 @@ def score_confidence(lead: NormalisedLead, extraction: CardExtraction) -> dict[s
     scores["last_name"] = grounded(lead.last_name)
     scores["position"] = grounded(lead.position)
     scores["company"] = grounded(lead.company)
-    scores["location"] = grounded(lead.location)
     scores["email"] = grounded(lead.email, validated=lead.email is not None)
     scores["phone"] = grounded(lead.phone, validated=lead.phone is not None)
+
+    # Location is assembled from address parts, so it is almost never printed
+    # in the form it is stored: a card shows "New Delhi - 110016", never
+    # "New Delhi, India". Scoring the joined string marked every correct
+    # location as doubtful, so it is scored by its components instead.
+    scores["location"] = _score_location(lead, haystack)
 
     # A digits-only comparison catches the common case where the stored E.164
     # form differs from the printed grouping.
     if lead.phone:
         digits = "".join(c for c in lead.phone if c.isdigit())
         haystack_digits = "".join(c for c in haystack if c.isdigit())
+        # The last nine digits identify a subscriber number without depending
+        # on how the country or trunk prefix was printed.
         if digits and digits[-9:] in haystack_digits:
             scores["phone"] = 1.0
     return scores
+
+
+def _score_location(lead: NormalisedLead, haystack: str) -> float:
+    """Score the display location by whether its parts appear in the text."""
+    if lead.location is None:
+        return 0.0
+    if not haystack:
+        return 0.6
+
+    parts = [_comparable(lead.address.get(key)) for key in ("city", "state", "country")]
+    present = [part for part in parts if part]
+    if not present:
+        return 0.6
+
+    matched = sum(1 for part in present if part in haystack)
+    if matched == len(present):
+        return 1.0
+    if matched:
+        # The city is printed but the country was inferred from context, which
+        # is normal and not a reason to flag the row.
+        return 0.9
+    return 0.6
