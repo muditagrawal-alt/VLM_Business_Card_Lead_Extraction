@@ -37,10 +37,32 @@ expected to be substantially faster and will be measured separately.
 | 1 | Qwen3-VL-4B Q4_K_M | 768 px | 82.1 % | 6 / 8 | 24.6 s | 30.9 s | 43.7 s |
 | 2 | Qwen3-VL-4B Q4_K_M | 768 px | 82.1 % | 6 / 8 | 18.8 s | 26.4 s | 60.0 s |
 | **3** | **Qwen3-VL-4B Q4_K_M** | **768 px** | **100.0 %** | **8 / 8** | **20.6 s** | **30.1 s** | **23.5 s** |
+| **4** | **Qwen3-VL-8B Q8_0** | **768 px** | **100.0 %** | **8 / 8** | **64.4 s** | **72.8 s** | **65.8 s** |
 
-Run 3 per field: all seven at 100 %. All eight cards were answered on the
-strictest structured-output rung (`json_schema`); no card needed a weaker
-format or a repair attempt.
+Runs 3 and 4 scored 100 % on every field, and every card in both was answered
+on the strictest structured-output rung (`json_schema`) — no card needed a
+weaker format or a repair attempt.
+
+### This card set is now saturated
+
+Both models score 100 %, so **the synthetic set can no longer tell them apart.**
+It was built to catch reasoning and schema failures, it caught a significant
+one (see below), and it has now done its job. Choosing between the 4B and the
+8B on this evidence is not possible, and any claim that the 8B is "more
+accurate here" would be unsupported.
+
+What the numbers *do* support:
+
+- **On CPU, the 4B is the right choice.** Equal accuracy at roughly a third of
+  the latency (23.5 s against 65.8 s) settles the fallback tier.
+- **The 8B's value has to be proven on harder input.** It is the primary tier
+  because published document benchmarks favour it and because a T4 should make
+  its latency a non-issue — not because this card set showed an advantage.
+
+The latency figures above are Metal on a laptop and are **not** the deployment
+numbers. A T4 is expected to be far faster for the 8B, but that is a
+projection until measured on the instance, and the README will not quote a
+figure before then.
 
 ### What changed between the runs
 
@@ -101,11 +123,15 @@ one. They do not test *perception*.
 
 Not yet measured, and required before any accuracy claim is made in the README:
 
+- **Cards hard enough to separate the models.** This is now the top priority:
+  with the set saturated, the next run needs input that actually discriminates.
+
 - **Real photographed cards** — phone camera, uneven lighting, angle, glare.
 - **A public business-card dataset**, for volume and independence from cards
   chosen by the same person who wrote the prompt.
 - **Non-Latin scripts**, where transliteration is the expected failure.
-- **Qwen3-VL-8B on a T4**, the actual primary tier.
+- **Qwen3-VL-8B on a T4.** The model is verified working end to end, but only
+  on Metal; the deployment latency is unmeasured.
 - **Image resolution.** llama.cpp warns that Qwen-VL wants at least 1024 image
   tokens for reliable grounding, which the current 768 px cap may undercut.
   The trade-off against latency needs measuring, not assuming.

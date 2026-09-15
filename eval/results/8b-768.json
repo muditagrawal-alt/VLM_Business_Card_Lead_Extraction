@@ -1,0 +1,293 @@
+{
+  "label": "Qwen3-VL-8B Q8_0 @ 768px (Metal, primary tier)",
+  "model": "Qwen3VL-8B-Instruct-Q8_0",
+  "tier": "gpu",
+  "max_edge": 768,
+  "summary": {
+    "cards": 8,
+    "cards_failed": 0,
+    "field_accuracy": 1.0,
+    "per_field": {
+      "first_name": 1.0,
+      "last_name": 1.0,
+      "position": 1.0,
+      "company": 1.0,
+      "location": 1.0,
+      "phone": 1.0,
+      "email": 1.0
+    },
+    "perfect_cards": 8,
+    "latency_p50_ms": 64412.0,
+    "latency_p95_ms": 72770,
+    "latency_mean_ms": 65753,
+    "output_modes": {
+      "json_schema": 8
+    }
+  },
+  "cards": [
+    {
+      "card": "01-clean-corporate.jpg",
+      "latency_ms": 72770,
+      "output_mode": "json_schema",
+      "fields": {
+        "first_name": true,
+        "last_name": true,
+        "position": true,
+        "company": true,
+        "location": true,
+        "phone": true,
+        "email": true
+      },
+      "got": {
+        "first_name": "Priya",
+        "last_name": "Raghavan",
+        "position": "Head of Business Development",
+        "company": "Meridian Logistics",
+        "location": "Mumbai, India",
+        "phone": "+919876543210",
+        "email": "priya.raghavan@meridianlog.com"
+      },
+      "expected": {
+        "first_name": "Priya",
+        "last_name": "Raghavan",
+        "position": "Head of Business Development",
+        "company": "Meridian Logistics",
+        "location": "Mumbai, India",
+        "phone": "+91 98765 43210",
+        "email": "priya.raghavan@meridianlog.com"
+      },
+      "error": null
+    },
+    {
+      "card": "02-dark-centred.jpg",
+      "latency_ms": 60141,
+      "output_mode": "json_schema",
+      "fields": {
+        "first_name": true,
+        "last_name": true,
+        "position": true,
+        "company": true,
+        "location": true,
+        "phone": true,
+        "email": true
+      },
+      "got": {
+        "first_name": "Tomas",
+        "last_name": "Lindqvist",
+        "position": "Chief Technology Officer",
+        "company": "Nordwave Systems",
+        "location": "Stockholm, Sweden",
+        "phone": "+46701234567",
+        "email": "t.lindqvist@nordwave.se"
+      },
+      "expected": {
+        "first_name": "Tomas",
+        "last_name": "Lindqvist",
+        "position": "Chief Technology Officer",
+        "company": "Nordwave Systems",
+        "location": "Stockholm, Sweden",
+        "phone": "+46 70 123 45 67",
+        "email": "t.lindqvist@nordwave.se"
+      },
+      "error": null
+    },
+    {
+      "card": "03-no-job-title.jpg",
+      "latency_ms": 56387,
+      "output_mode": "json_schema",
+      "fields": {
+        "first_name": true,
+        "last_name": true,
+        "position": true,
+        "company": true,
+        "location": true,
+        "phone": true,
+        "email": true
+      },
+      "got": {
+        "first_name": "Marcus",
+        "last_name": "Oyelaran",
+        "position": null,
+        "company": "Oyelaran & Co.",
+        "location": "London, United Kingdom",
+        "phone": "+442079460958",
+        "email": "marcus@oyelaran.co.uk"
+      },
+      "expected": {
+        "first_name": "Marcus",
+        "last_name": "Oyelaran",
+        "position": null,
+        "company": "Oyelaran & Co.",
+        "location": "London, United Kingdom",
+        "phone": "+44 20 7946 0958",
+        "email": "marcus@oyelaran.co.uk"
+      },
+      "error": null
+    },
+    {
+      "card": "04-initial-only.jpg",
+      "latency_ms": 56086,
+      "output_mode": "json_schema",
+      "fields": {
+        "first_name": true,
+        "last_name": true,
+        "position": true,
+        "company": true,
+        "location": true,
+        "phone": true,
+        "email": true
+      },
+      "got": {
+        "first_name": "J.",
+        "last_name": "Wehrmann",
+        "position": "Senior Procurement Manager",
+        "company": "Baltrex Industrie GmbH",
+        "location": "Berlin, Germany",
+        "phone": "+4930901820",
+        "email": "j.wehrmann@baltrex.de"
+      },
+      "expected": {
+        "first_name": "J.",
+        "last_name": "Wehrmann",
+        "position": "Senior Procurement Manager",
+        "company": "Baltrex Industrie GmbH",
+        "location": "Berlin, Germany",
+        "phone": "+49 30 901820",
+        "email": "j.wehrmann@baltrex.de"
+      },
+      "error": null
+    },
+    {
+      "card": "05-honorific-suffix.jpg",
+      "latency_ms": 66280,
+      "output_mode": "json_schema",
+      "fields": {
+        "first_name": true,
+        "last_name": true,
+        "position": true,
+        "company": true,
+        "location": true,
+        "phone": true,
+        "email": true
+      },
+      "got": {
+        "first_name": "Eleanor",
+        "last_name": "Whitfield",
+        "position": "Principal Consultant",
+        "company": "Whitfield Advisory",
+        "location": "San Francisco, USA",
+        "phone": "+14155550142",
+        "email": "eleanor@whitfieldadvisory.com"
+      },
+      "expected": {
+        "first_name": "Eleanor",
+        "last_name": "Whitfield",
+        "position": "Principal Consultant",
+        "company": "Whitfield Advisory",
+        "location": "San Francisco, USA",
+        "phone": "+1 (415) 555-0142",
+        "email": "eleanor@whitfieldadvisory.com"
+      },
+      "error": null
+    },
+    {
+      "card": "06-two-people.jpg",
+      "latency_ms": 67958,
+      "output_mode": "json_schema",
+      "fields": {
+        "first_name": true,
+        "last_name": true,
+        "position": true,
+        "company": true,
+        "location": true,
+        "phone": true,
+        "email": true
+      },
+      "got": {
+        "first_name": "Hiroshi",
+        "last_name": "Tanaka",
+        "position": "Export Director",
+        "company": "Tanaka Seiki Co., Ltd.",
+        "location": "Tokyo, Japan",
+        "phone": "+81352991234",
+        "email": "h.tanaka@tanakaseiki.jp"
+      },
+      "expected": {
+        "first_name": "Hiroshi",
+        "last_name": "Tanaka",
+        "position": "Export Director",
+        "company": "Tanaka Seiki Co., Ltd.",
+        "location": "Tokyo, Japan",
+        "phone": "+81 3 5299 1234",
+        "email": "h.tanaka@tanakaseiki.jp"
+      },
+      "error": null
+    },
+    {
+      "card": "07-tagline-trap.jpg",
+      "latency_ms": 62544,
+      "output_mode": "json_schema",
+      "fields": {
+        "first_name": true,
+        "last_name": true,
+        "position": true,
+        "company": true,
+        "location": true,
+        "phone": true,
+        "email": true
+      },
+      "got": {
+        "first_name": "Aisha",
+        "last_name": "Khoury",
+        "position": "Marketing Lead",
+        "company": "Cedarline Foods",
+        "location": "Dubai, United Arab Emirates",
+        "phone": "+97141234567",
+        "email": "aisha.khoury@cedarline.ae"
+      },
+      "expected": {
+        "first_name": "Aisha",
+        "last_name": "Khoury",
+        "position": "Marketing Lead",
+        "company": "Cedarline Foods",
+        "location": "Dubai, United Arab Emirates",
+        "phone": "+971 4 123 4567",
+        "email": "aisha.khoury@cedarline.ae"
+      },
+      "error": null
+    },
+    {
+      "card": "08-multiple-phones.jpg",
+      "latency_ms": 83863,
+      "output_mode": "json_schema",
+      "fields": {
+        "first_name": true,
+        "last_name": true,
+        "position": true,
+        "company": true,
+        "location": true,
+        "phone": true,
+        "email": true
+      },
+      "got": {
+        "first_name": "Daniel",
+        "last_name": "Okonkwo",
+        "position": "Operations Manager",
+        "company": "Harmattan Freight",
+        "location": "Lagos, Nigeria",
+        "phone": "+2348035550188",
+        "email": "daniel.okonkwo@harmattan.ng"
+      },
+      "expected": {
+        "first_name": "Daniel",
+        "last_name": "Okonkwo",
+        "position": "Operations Manager",
+        "company": "Harmattan Freight",
+        "location": "Lagos, Nigeria",
+        "phone": "+234 803 555 0188",
+        "email": "daniel.okonkwo@harmattan.ng"
+      },
+      "error": null
+    }
+  ]
+}
