@@ -14,8 +14,10 @@ REPO_8B="Qwen/Qwen3-VL-8B-Instruct-GGUF"
 REPO_4B="Qwen/Qwen3-VL-4B-Instruct-GGUF"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-5}"
 
-# Only the primary tier is mandatory by default. Set TIERS=all to also fetch
-# the CPU fallback and the quantisation used for model comparison.
+# Which tiers to fetch:
+#   all  - the 8B primary and the 4B fallback (default; ~13 GB)
+#   cpu  - only the 4B, for a CPU-profile deployment (~3 GB)
+#   gpu  - only the 8B
 TIERS="${TIERS:-all}"
 
 if ! command -v hf >/dev/null 2>&1; then
@@ -67,14 +69,15 @@ fetch() {
   return 1
 }
 
-# Tier 1 (primary, GPU). The projector is fetched first: without it the model
-# loads but cannot see images, which is a far more confusing failure than a
-# missing model file.
-fetch "$REPO_8B" "mmproj-Qwen3VL-8B-Instruct-F16.gguf"
-fetch "$REPO_8B" "Qwen3VL-8B-Instruct-Q8_0.gguf"
+# The projector is always fetched before its model: without it the model loads
+# but cannot see images, which is a far more confusing failure than a missing
+# model file, so it is better to fail on the small download first.
+if [[ "$TIERS" == "all" || "$TIERS" == "gpu" ]]; then
+  fetch "$REPO_8B" "mmproj-Qwen3VL-8B-Instruct-F16.gguf"
+  fetch "$REPO_8B" "Qwen3VL-8B-Instruct-Q8_0.gguf"
+fi
 
-if [[ "$TIERS" == "all" ]]; then
-  # Tier 2 (CPU fallback).
+if [[ "$TIERS" == "all" || "$TIERS" == "cpu" ]]; then
   fetch "$REPO_4B" "mmproj-Qwen3VL-4B-Instruct-F16.gguf"
   fetch "$REPO_4B" "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
 fi
