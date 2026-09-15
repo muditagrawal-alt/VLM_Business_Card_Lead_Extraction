@@ -1,33 +1,216 @@
 @import 'tailwindcss';
 
-/* Design tokens — a dense, neutral business-tool palette with one accent. */
-@theme {
-  --color-accent-50: oklch(0.97 0.02 250);
-  --color-accent-100: oklch(0.93 0.04 250);
-  --color-accent-500: oklch(0.55 0.18 255);
-  --color-accent-600: oklch(0.48 0.18 255);
-  --color-accent-700: oklch(0.41 0.16 255);
+/* ============================================================
+   Design tokens
+   ------------------------------------------------------------
+   Values are taken from O-HIVE's own production stylesheet
+   (o-hive.ai), which runs the same Tailwind v4 + shadcn token
+   architecture. Keeping the palette identical means this tool
+   reads as part of their product rather than adjacent to it.
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+   The system is deliberately near-monochrome: one very dark
+   primary (#030213, near-black with a blue-violet cast), neutral
+   greys, and a single red reserved for destructive states. No
+   gradients, no second accent hue.
+   ============================================================ */
+
+:root {
+  --background: #ffffff;
+  --foreground: oklch(14.5% 0 0);
+
+  --card: #ffffff;
+  --card-foreground: oklch(14.5% 0 0);
+
+  --primary: #030213;
+  --primary-foreground: oklch(100% 0 0);
+
+  --secondary: oklch(95% 0.0058 264.53);
+  --secondary-foreground: #030213;
+
+  --muted: #ececf0;
+  --muted-foreground: #717182;
+
+  --accent: #e9ebef;
+  --accent-foreground: #030213;
+
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+
+  /* Amber is not in O-HIVE's palette, but this tool needs a
+     "check this value" signal that is neither neutral nor an
+     error. Chosen to sit at the same lightness as the greys. */
+  --warning: oklch(76% 0.13 78);
+  --warning-surface: oklch(96.5% 0.03 92);
+  --warning-foreground: oklch(38% 0.08 70);
+
+  --success: oklch(60% 0.13 152);
+
+  --border: rgb(0 0 0 / 10%);
+  --input-background: #f3f3f5;
+  --ring: oklch(43.9% 0 0);
+
+  --radius: 0.625rem;
 }
 
-html,
-body,
-#root {
-  height: 100%;
+/* Explicit choice wins over the system preference. */
+:root[data-theme='dark'],
+:root:not([data-theme='light']) {
+  color-scheme: light;
 }
 
-body {
-  @apply bg-neutral-50 text-neutral-900 antialiased;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --background: oklch(14.5% 0 0);
+    --foreground: oklch(98.5% 0 0);
+
+    --card: oklch(17% 0 0);
+    --card-foreground: oklch(98.5% 0 0);
+
+    --primary: oklch(98.5% 0 0);
+    --primary-foreground: oklch(20.5% 0 0);
+
+    --secondary: oklch(26.9% 0 0);
+    --secondary-foreground: oklch(98.5% 0 0);
+
+    --muted: oklch(26.9% 0 0);
+    --muted-foreground: oklch(70.8% 0 0);
+
+    --accent: oklch(26.9% 0 0);
+    --accent-foreground: oklch(98.5% 0 0);
+
+    --destructive: oklch(63.7% 0.237 25.331);
+    --destructive-foreground: oklch(98.5% 0 0);
+
+    --warning: oklch(76% 0.13 78);
+    --warning-surface: oklch(28% 0.05 80);
+    --warning-foreground: oklch(88% 0.09 85);
+
+    --border: oklch(30% 0 0);
+    --input-background: oklch(22% 0 0);
+    --ring: oklch(70.8% 0 0);
+  }
 }
 
-/* Respect users who ask for less motion. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --background: oklch(14.5% 0 0);
+  --foreground: oklch(98.5% 0 0);
+  --card: oklch(17% 0 0);
+  --card-foreground: oklch(98.5% 0 0);
+  --primary: oklch(98.5% 0 0);
+  --primary-foreground: oklch(20.5% 0 0);
+  --secondary: oklch(26.9% 0 0);
+  --secondary-foreground: oklch(98.5% 0 0);
+  --muted: oklch(26.9% 0 0);
+  --muted-foreground: oklch(70.8% 0 0);
+  --accent: oklch(26.9% 0 0);
+  --accent-foreground: oklch(98.5% 0 0);
+  --destructive: oklch(63.7% 0.237 25.331);
+  --destructive-foreground: oklch(98.5% 0 0);
+  --warning: oklch(76% 0.13 78);
+  --warning-surface: oklch(28% 0.05 80);
+  --warning-foreground: oklch(88% 0.09 85);
+  --border: oklch(30% 0 0);
+  --input-background: oklch(22% 0 0);
+  --ring: oklch(70.8% 0 0);
+}
+
+/* Expose the tokens to Tailwind's utility generation. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input-background);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    /* Removes the 300ms double-tap delay on touch devices. */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Headings should not leave a single word on the last line. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Figures in a column must align digit-for-digit to be scannable. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* A user asking for less motion gets none of it. Transitions are
+   reduced to an imperceptible duration rather than removed, so
+   state changes still fire their transitionend handlers. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
