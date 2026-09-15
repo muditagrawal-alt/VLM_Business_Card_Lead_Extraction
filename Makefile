@@ -28,7 +28,7 @@ install-frontend: ## Install Node dependencies
 	cd frontend && npm install
 
 .PHONY: models
-models: ## Download Qwen3-VL GGUF weights (~14 GB)
+models: ## Download Qwen3-VL GGUF weights (~13 GB; TIERS=cpu for just the 4B)
 	./scripts/download_models.sh
 
 # ---------------- local inference ----------------
@@ -98,8 +98,22 @@ format: ## Auto-format everything
 	cd frontend && npm run format
 
 .PHONY: eval
-eval: ## Run the accuracy evaluation across provider tiers
-	cd backend && uv run python -m eval.run_eval
+eval: ## Evaluate the CPU tier (4B on :8081) against the card set
+	cd backend && uv run python ../eval/run_eval.py \
+		--tier cpu --base-url http://127.0.0.1:8081/v1 \
+		--model Qwen3VL-4B-Instruct-Q4_K_M \
+		--json-out ../eval/results/latest-4b.json
+
+.PHONY: eval-gpu
+eval-gpu: ## Evaluate the primary tier (8B on :8080) against the card set
+	cd backend && uv run python ../eval/run_eval.py \
+		--tier gpu --base-url http://127.0.0.1:8080/v1 \
+		--model Qwen3VL-8B-Instruct-Q8_0 --timeout 600 \
+		--json-out ../eval/results/latest-8b.json
+
+.PHONY: cards
+cards: ## Regenerate the synthetic evaluation cards
+	cd backend && uv run python ../eval/generate_cards.py --out ../eval/cards/synthetic
 
 # ---------------- deploy ----------------
 .PHONY: deploy-gpu
