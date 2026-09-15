@@ -7,6 +7,7 @@ claiming, JSONB querying) is covered by the integration tests instead.
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, ClassVar
 
 import pytest
@@ -19,6 +20,28 @@ from app.models import Base
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+
+@pytest.fixture(autouse=True)
+def _isolate_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the suite independent of the developer's local configuration.
+
+    Settings reads a .env file and the ambient environment, so a developer
+    running the app locally — with the GPU tier disabled, say — would see
+    different test results from CI. Tests must assert on the code's defaults,
+    not on whatever is in the working copy.
+    """
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for name in list(os.environ):
+        if name.startswith(
+            ("VLM_", "APP_", "POSTGRES_", "WORKER_", "RATE_", "STORAGE_")
+        ) or name in {
+            "DATABASE_URL",
+            "LOG_LEVEL",
+            "RETENTION_DAYS",
+            "IMAGE_MAX_EDGE_PX",
+        }:
+            monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
