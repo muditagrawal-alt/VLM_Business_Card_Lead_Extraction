@@ -1,12 +1,15 @@
 import { cn } from '@/lib/utils';
 
-/** Uses aria-hidden: surrounding text carries the status for screen readers. */
+/**
+ * aria-hidden because the surrounding text carries the status. A spinner
+ * announced on its own tells a screen reader user nothing.
+ */
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
-      aria-hidden
+      aria-hidden="true"
       className={cn(
-        'inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent',
+        'inline-block size-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent',
         className,
       )}
     />
