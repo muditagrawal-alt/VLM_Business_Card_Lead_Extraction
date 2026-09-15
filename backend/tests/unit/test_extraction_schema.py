@@ -66,7 +66,10 @@ class TestGrammarSchemaShape:
         """Unbounded free text is where a small model degenerates.
 
         The notes field was observed looping the same sentences until the token
-        budget ran out, losing the fields that mattered.
+        budget ran out, losing the fields that mattered. The cap is also tight
+        rather than generous: with a 400-character limit the model filled the
+        space with narration on four cards out of five, and generation is the
+        latency bottleneck, so those tokens cost real seconds.
         """
 
         def max_len(field: str) -> int | None:
@@ -75,7 +78,7 @@ class TestGrammarSchemaShape:
                     return branch.get("maxLength")
             return None
 
-        assert max_len("notes") == 400
+        assert max_len("notes") == 180
         assert max_len("company") == 256
         assert max_len("first_name") == 128
 

@@ -112,12 +112,16 @@ class CardExtraction(BaseModel):
         default_factory=PostalAddress, description="The postal address, split into parts."
     )
 
-    # Capped tightly and declared last. Left unbounded and free-form, a small
-    # model degenerates into a repetition loop here, burning the whole token
-    # budget and losing the fields that actually matter.
+    # Capped hard and declared last. Two separate problems converge here.
+    # Left unbounded, a small model degenerates into a repetition loop and
+    # burns the whole token budget. Left generous, it fills the space with
+    # narration — measured at 15% of every response, hitting the previous
+    # 400-character cap on four cards out of five with text like "Suffix
+    # 'Jr', 'Sr', 'PhD' not present". Generation is the latency bottleneck,
+    # so those are tokens paid for in seconds.
     notes: str | None = Field(
         default=None,
-        max_length=400,
+        max_length=180,
         description=(
             "Anything a reviewer should know: a second person on the card, "
             "unreadable text, or an honorific and suffix that were removed "
