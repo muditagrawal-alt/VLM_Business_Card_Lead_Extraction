@@ -1,0 +1,60 @@
+# Caddy terminates TLS, serves the built SPA and proxies the API.
+#
+# SITE_ADDRESS is the public hostname. With an Elastic IP and no domain,
+# <ip>.sslip.io resolves to that IP and gets a real Let's Encrypt certificate
+# with no DNS setup at all.
+{
+	email {$ACME_EMAIL}
+	# Uncomment while iterating on deployment to avoid Let's Encrypt's
+	# production rate limits, which are easy to hit on repeated rebuilds.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		# HSTS, plus the headers that cost nothing and close off whole
+		# categories of attack.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The SPA loads no third-party scripts, so the policy can be strict.
+		# 'unsafe-inline' for styles only: the bundler inlines a small
+		# critical stylesheet.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+		-Server
+	}
+
+	# Uploads are multipart batches of images; the default limit would reject
+	# a full batch. The application enforces its own per-file and per-batch
+	# caps with a message the user can act on.
+	request_body {
+		max_size 520MB
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# A card on the CPU tier can take minutes; the proxy must not
+			# give up before the application's own timeout does.
+			transport http {
+				response_header_timeout 300s
+				read_timeout 300s
+			}
+		}
+	}
+
+	handle {
+		root * /srv
+		# SPA fallback: unknown paths return index.html so a shared batch URL
+		# works on a cold load rather than 404ing.
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

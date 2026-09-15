@@ -1,0 +1,188 @@
+# Production stack, run with a profile:
+#
+#   docker compose -f deploy/docker-compose.prod.yml --profile gpu up -d --build
+#   docker compose -f deploy/docker-compose.prod.yml --profile cpu up -d --build
+#
+# The gpu profile adds the 8B model on the GPU as the primary tier. The cpu
+# profile is the same stack without it, for running on a cheaper instance once
+# credits run low — the API and worker are unchanged, so the switch is
+# configuration rather than a different build.
+name: vlm-leads
+
+x-app-env: &app-env
+  APP_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-leads}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-leads}
+  STORAGE_LOCAL_PATH: /app/storage
+  APP_ACCESS_CODE: ${APP_ACCESS_CODE:-}
+  IMAGE_MAX_EDGE_PX: ${IMAGE_MAX_EDGE_PX:-768}
+  RETENTION_DAYS: ${RETENTION_DAYS:-7}
+  # Tier 1 is present only under the gpu profile; when it is absent the
+  # chain's health probe skips it and the CPU tier takes over.
+  VLM_GPU_ENABLED: ${VLM_GPU_ENABLED:-true}
+  VLM_GPU_BASE_URL: http://llama-gpu:8080/v1
+  VLM_GPU_MODEL: Qwen3VL-8B-Instruct-Q8_0
+  VLM_CPU_ENABLED: ${VLM_CPU_ENABLED:-true}
+  VLM_CPU_BASE_URL: http://llama-cpu:8080/v1
+  VLM_CPU_MODEL: Qwen3VL-4B-Instruct-Q4_K_M
+  VLM_CLOUD_ENABLED: ${VLM_CLOUD_ENABLED:-true}
+  VLM_CLOUD_BASE_URL: ${VLM_CLOUD_BASE_URL:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
+  VLM_CLOUD_MODEL: ${VLM_CLOUD_MODEL:-qwen3-vl-plus}
+  VLM_CLOUD_API_KEY: ${VLM_CLOUD_API_KEY:-}
+
+services:
+  caddy:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      # Persisted so a rebuild reuses the existing certificate instead of
+      # requesting a new one and risking Let's Encrypt's rate limit.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_started
+
+  api:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    environment: *app-env
+    volumes:
+      - card_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Applying migrations here rather than in a separate job keeps the schema
+    # and the code that needs it in one atomic deploy step.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000
+             --proxy-headers --forwarded-allow-ips '*'"
+    mem_limit: 900m
+
+  worker:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      # One card at a time unless the GPU is serving: llama.cpp on two vCPUs
+      # gains nothing from parallel requests and risks memory pressure.
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+    volumes:
+      - card_storage:/app/storage
+    depends_on:
+      api:
+        condition: service_started
+    command: ["python", "-m", "app.worker"]
+    # SIGTERM asks the worker to finish its current cards; give it room to.
+    stop_grace_period: 120s
+    mem_limit: 900m
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-leads}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-leads}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leads} -d ${POSTGRES_DB:-leads}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+
+  llama-gpu:
+    profiles: ["gpu"]
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    restart: unless-stopped
+    environment:
+      LLAMA_ARG_MODEL: /models/Qwen3VL-8B-Instruct-Q8_0.gguf
+      LLAMA_ARG_MMPROJ: /models/mmproj-Qwen3VL-8B-Instruct-F16.gguf
+      # 8192 total across 2 slots: a card needs roughly 1.5k tokens including
+      # its image, so this leaves headroom without wasting VRAM.
+      LLAMA_ARG_CTX_SIZE: "8192"
+      LLAMA_ARG_N_PARALLEL: "2"
+      LLAMA_ARG_N_GPU_LAYERS: "99"
+      LLAMA_ARG_FLASH_ATTN: "on"
+      LLAMA_ARG_JINJA: "1"
+      LLAMA_ARG_HOST: 0.0.0.0
+      LLAMA_ARG_PORT: "8080"
+    volumes:
+      - ${MODELS_DIR:-/opt/models}:/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      # Loading 8 GB of weights takes a while; a short start period would
+      # restart-loop the container before it ever became ready.
+      start_period: 300s
+      retries: 3
+
+  llama-cpu:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    restart: unless-stopped
+    environment:
+      LLAMA_ARG_MODEL: /models/Qwen3VL-4B-Instruct-Q4_K_M.gguf
+      LLAMA_ARG_MMPROJ: /models/mmproj-Qwen3VL-4B-Instruct-F16.gguf
+      LLAMA_ARG_CTX_SIZE: "4096"
+      LLAMA_ARG_N_PARALLEL: "1"
+      LLAMA_ARG_JINJA: "1"
+      LLAMA_ARG_HOST: 0.0.0.0
+      LLAMA_ARG_PORT: "8080"
+    volumes:
+      - ${MODELS_DIR:-/opt/models}:/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s
+      retries: 3
+    mem_limit: 6g
+
+  backup:
+    image: postgres:16-alpine
+    profiles: ["gpu", "cpu"]
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - db_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # A nightly dump with a 14-day window. Restoring is documented in the
+    # runbook; an untested backup is not a backup.
+    command: >
+      sh -c 'while true; do
+        sleep 86400;
+        pg_dump -h postgres -U ${POSTGRES_USER:-leads} -d ${POSTGRES_DB:-leads}
+          | gzip > /backups/leads-$$(date +%%Y%%m%%d).sql.gz;
+        find /backups -name "leads-*.sql.gz" -mtime +14 -delete;
+      done'
+
+volumes:
+  postgres_data:
+  card_storage:
+  caddy_data:
+  caddy_config:
+  db_backups:
