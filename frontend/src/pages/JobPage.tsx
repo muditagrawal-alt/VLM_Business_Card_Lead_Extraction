@@ -1,18 +1,55 @@
+import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, Download, FileSpreadsheet, RotateCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api } from '@/api/client';
 import { LeadDrawer } from '@/components/LeadDrawer';
 import { LeadsTable } from '@/components/LeadsTable';
+import { ProgressPanel } from '@/components/ProgressPanel';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { useJob, useLeads, useRetryTask, useUpdateLead } from '@/hooks/useJob';
+import { FAST, riseIn } from '@/lib/motion';
+import { cn } from '@/lib/utils';
 import { isJobSettled, type Lead, type Task } from '@/types/api';
 
-function formatEta(seconds: number | null): string {
-  if (seconds === null) return 'estimating…';
-  if (seconds <= 0) return 'finishing up';
-  if (seconds < 60) return `about ${seconds}s remaining`;
-  return `about ${Math.ceil(seconds / 60)} min remaining`;
+/** Export links are real anchors so the browser performs the download. */
+function ExportLink({
+  href,
+  enabled,
+  primary,
+  children,
+}: {
+  href: string;
+  enabled: boolean;
+  primary?: boolean;
+  children: React.ReactNode;
+}) {
+  const base =
+    'inline-flex h-9 items-center gap-2 rounded-md px-4 text-sm font-medium transition-[background-color,opacity] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  if (!enabled) {
+    return (
+      <span
+        aria-disabled="true"
+        title="Available once at least one card has been extracted"
+        className={cn(base, 'cursor-not-allowed border border-border text-muted-foreground/50')}
+      >
+        {children}
+      </span>
+    );
+  }
+  return (
+    <a
+      href={href}
+      className={cn(
+        base,
+        primary
+          ? 'bg-primary text-primary-foreground hover:opacity-90'
+          : 'border border-border bg-card hover:bg-accent',
+      )}
+    >
+      {children}
+    </a>
+  );
 }
 
 export function JobPage({ jobId, onBack }: { jobId: string; onBack: () => void }) {
@@ -28,11 +65,14 @@ export function JobPage({ jobId, onBack }: { jobId: string; onBack: () => void }
     return map;
   }, [job?.tasks]);
 
-  const failed = (job?.tasks ?? []).filter((task) => task.status === 'failed');
+  const failed = useMemo(
+    () => (job?.tasks ?? []).filter((task) => task.status === 'failed'),
+    [job?.tasks],
+  );
 
   if (isLoading) {
     return (
-      <p className="flex items-center gap-2 py-16 text-sm text-neutral-500">
+      <p className="flex items-center gap-2 py-20 text-sm text-muted-foreground">
         <Spinner /> Loading this batch…
       </p>
     );
@@ -40,137 +80,95 @@ export function JobPage({ jobId, onBack }: { jobId: string; onBack: () => void }
 
   if (error || !job) {
     return (
-      <div className="py-16 text-center">
-        <p className="text-sm text-neutral-700">
+      <div className="py-20 text-center">
+        <p className="text-sm">
           {error instanceof Error ? error.message : 'This batch could not be found.'}
         </p>
         <Button variant="secondary" size="sm" className="mt-4" onClick={onBack}>
-          Upload some cards
+          Upload Some Cards
         </Button>
       </div>
     );
   }
 
   const settled = isJobSettled(job);
-  const processed = job.done + job.failed;
-  const percent = job.total > 0 ? Math.round((processed / job.total) * 100) : 0;
   const hasLeads = (leads?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-5">
+    <motion.div variants={riseIn} initial="hidden" animate="visible" className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="size-4" aria-hidden /> New batch
+          <ArrowLeft className="size-4" aria-hidden="true" /> New Batch
         </Button>
 
         <div className="flex gap-2">
-          <a
-            href={api.exportUrl(jobId, 'csv')}
-            className={
-              hasLeads
-                ? 'inline-flex h-9 items-center gap-2 rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium text-neutral-800 hover:bg-neutral-50'
-                : 'pointer-events-none inline-flex h-9 items-center gap-2 rounded-md border border-neutral-200 px-4 text-sm text-neutral-400'
-            }
-            aria-disabled={!hasLeads}
-          >
-            <Download className="size-4" aria-hidden /> CSV
-          </a>
-          <a
-            href={api.exportUrl(jobId, 'xlsx')}
-            className={
-              hasLeads
-                ? 'inline-flex h-9 items-center gap-2 rounded-md bg-accent-600 px-4 text-sm font-medium text-white hover:bg-accent-700'
-                : 'pointer-events-none inline-flex h-9 items-center gap-2 rounded-md bg-neutral-200 px-4 text-sm text-neutral-400'
-            }
-            aria-disabled={!hasLeads}
-          >
-            <FileSpreadsheet className="size-4" aria-hidden /> Download Excel
-          </a>
+          <ExportLink href={api.exportUrl(jobId, 'csv')} enabled={hasLeads}>
+            <Download className="size-4" aria-hidden="true" /> CSV
+          </ExportLink>
+          <ExportLink href={api.exportUrl(jobId, 'xlsx')} enabled={hasLeads} primary>
+            <FileSpreadsheet className="size-4" aria-hidden="true" /> Download Excel
+          </ExportLink>
         </div>
       </div>
 
-      <section
-        aria-label="Batch progress"
-        className="rounded-lg border border-neutral-200 bg-white p-4"
-      >
-        <div className="flex items-baseline justify-between gap-4">
-          <p className="text-sm text-neutral-800">
-            <span className="font-semibold">{processed}</span> of {job.total} cards processed
-            {job.failed > 0 && (
-              <span className="text-red-700"> · {job.failed} failed</span>
-            )}
-          </p>
-          <p className="text-xs text-neutral-500" aria-live="polite">
-            {settled ? 'Complete' : formatEta(job.estimated_seconds_remaining)}
-          </p>
-        </div>
+      <ProgressPanel job={job} />
 
-        <div
-          role="progressbar"
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="Cards processed"
-          className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100"
-        >
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              job.status === 'failed' ? 'bg-red-500' : 'bg-accent-600'
-            }`}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-
-        {!settled && job.queue_depth > job.pending && (
-          <p className="mt-2 text-xs text-neutral-500">
-            {job.queue_depth} cards are queued in total, so this batch may wait behind
-            another.
-          </p>
-        )}
-      </section>
-
-      {failed.length > 0 && (
-        <section className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <h2 className="text-sm font-medium text-red-900">
-            {failed.length} {failed.length === 1 ? 'card' : 'cards'} could not be read
-          </h2>
-          <ul className="mt-2 space-y-1.5">
-            {failed.map((task) => (
-              <li key={task.id} className="flex items-center justify-between gap-3 text-xs">
-                <span className="text-red-800">
-                  <span className="font-medium">{task.original_filename ?? 'card'}</span>
-                  {task.error && <span className="text-red-700"> — {task.error}</span>}
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => retryTask.mutate(task.id)}
-                  disabled={retryTask.isPending}
+      <AnimatePresence>
+        {failed.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={FAST}
+            className="overflow-hidden rounded-xl border border-destructive/25 bg-destructive/5 p-4"
+          >
+            <h2 className="text-sm font-medium text-destructive">
+              <span className="tnum">{failed.length}</span>{' '}
+              {failed.length === 1 ? 'card' : 'cards'} could not be read
+            </h2>
+            <ul className="mt-2.5 space-y-2">
+              {failed.map((task) => (
+                <li
+                  key={task.id}
+                  className="flex flex-wrap items-center justify-between gap-3 text-xs"
                 >
-                  <RotateCw className="size-3" aria-hidden /> Retry
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+                  <span className="min-w-0 text-destructive">
+                    <span className="font-medium">
+                      {task.original_filename ?? 'card'}
+                    </span>
+                    {task.error ? <span className="text-destructive/80"> — {task.error}</span> : null}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => retryTask.mutate(task.id)}
+                    disabled={retryTask.isPending}
+                  >
+                    {retryTask.isPending ? (
+                      <Spinner className="size-3" />
+                    ) : (
+                      <RotateCw className="size-3" aria-hidden="true" />
+                    )}
+                    Retry
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       {hasLeads ? (
-        <LeadsTable
-          leads={leads ?? []}
-          tasksByImage={tasksByImage}
-          onSelect={setSelected}
-        />
+        <LeadsTable leads={leads ?? []} tasksByImage={tasksByImage} onSelect={setSelected} />
       ) : (
-        <p className="rounded-lg border border-dashed border-neutral-300 bg-white py-12 text-center text-sm text-neutral-500">
+        <p className="rounded-xl border border-dashed border-border bg-card py-16 text-center text-sm text-muted-foreground">
           {settled
             ? 'No leads were extracted from this batch.'
-            : 'Leads will appear here as each card finishes.'}
+            : 'Leads appear here as each card finishes.'}
         </p>
       )}
 
-      {selected && (
-        <LeadDrawer
+      {selected ? <LeadDrawer
           lead={selected}
           saving={updateLead.isPending}
           onClose={() => setSelected(null)}
@@ -180,8 +178,7 @@ export function JobPage({ jobId, onBack }: { jobId: string; onBack: () => void }
               { onSuccess: (updated) => setSelected(updated) },
             )
           }
-        />
-      )}
-    </div>
+        /> : null}
+    </motion.div>
   );
 }
