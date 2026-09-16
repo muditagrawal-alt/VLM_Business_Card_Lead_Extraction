@@ -62,6 +62,7 @@ class OpenAICompatProvider:
     ) -> None:
         self.tier = tier
         self.model = model
+        self._timeout_s = timeout_s
         self._base_url = base_url.rstrip("/")
         self._supports_json_schema = supports_json_schema
         headers = {"Content-Type": "application/json"}
@@ -112,12 +113,22 @@ class OpenAICompatProvider:
                     latency_ms=int((time.perf_counter() - started) * 1000),
                     raw_response={"mode": mode.value, "content": text},
                 )
-            except (httpx.TimeoutException, httpx.ConnectError) as exc:
-                # A transport failure will not be fixed by a weaker output
-                # format, so stop and let the chain fall to the next tier.
-                # The tier is carried on the exception and applied as a label
-                # by the chain, so including it here would read "cpu: cpu: ...".
-                raise VLMError(f"transport failure: {exc}", tier=self.tier) from exc
+            except httpx.TimeoutException as exc:
+                # httpx timeout exceptions stringify to an empty message, so
+                # this previously surfaced as "transport failure: " and told
+                # nobody anything. The timeout is the actionable detail: it
+                # says whether to wait longer or make the model faster.
+                raise VLMError(f"timed out after {self._timeout_s:.0f}s", tier=self.tier) from exc
+            except httpx.ConnectError as exc:
+                # Naming the address distinguishes a stopped model server from
+                # a misconfigured one, which look identical from the outside.
+                raise VLMError(f"could not connect to {self._base_url}", tier=self.tier) from exc
+            # TransportError, not HTTPError: HTTPStatusError is a subclass of
+            # HTTPError, so catching the parent here would swallow 400, 429 and
+            # 5xx responses and defeat the degradation ladder below.
+            except httpx.TransportError as exc:
+                detail = str(exc) or type(exc).__name__
+                raise VLMError(f"transport failure: {detail}", tier=self.tier) from exc
             except (ValidationError, ValueError, KeyError) as exc:
                 last_error = exc
                 log.warning(

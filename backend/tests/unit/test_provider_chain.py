@@ -216,3 +216,49 @@ class TestHealth:
         cpu = FakeProvider(ProviderTier.CPU, healthy=True)
         chain, _ = build_chain(gpu, cpu)
         assert await chain.health() == {"gpu": False, "cpu": True}
+
+
+class TestTransportErrorMessages:
+    """A failed card is only useful if the reason is legible.
+
+    Production reported `all inference tiers failed (cpu: transport failure: )`
+    on a timeout, because httpx timeout exceptions stringify to an empty
+    string. The message named no cause, no tier setting and no next step.
+    """
+
+    async def test_a_timeout_reports_the_timeout(self) -> None:
+        import httpx
+
+        from app.vlm.openai_compat import OpenAICompatProvider
+
+        provider = OpenAICompatProvider(
+            tier=ProviderTier.CPU, base_url="http://127.0.0.1:1/v1", model="m", timeout_s=42
+        )
+
+        async def always_timeout(*_args: object, **_kwargs: object) -> None:
+            raise httpx.ReadTimeout("")
+
+        provider._complete = always_timeout  # type: ignore[assignment]
+
+        with pytest.raises(VLMError) as exc_info:
+            await provider.extract("data:image/jpeg;base64,x")
+
+        assert "timed out after 42s" in str(exc_info.value)
+        await provider.aclose()
+
+    async def test_a_refused_connection_names_the_address(self) -> None:
+        """Distinguishes a stopped model server from a misconfigured URL."""
+        from app.vlm.openai_compat import OpenAICompatProvider
+
+        provider = OpenAICompatProvider(
+            tier=ProviderTier.CPU,
+            base_url="http://127.0.0.1:9/v1",
+            model="m",
+            timeout_s=2,
+        )
+
+        with pytest.raises(VLMError) as exc_info:
+            await provider.extract("data:image/jpeg;base64,x")
+
+        assert "could not connect to http://127.0.0.1:9/v1" in str(exc_info.value)
+        await provider.aclose()
