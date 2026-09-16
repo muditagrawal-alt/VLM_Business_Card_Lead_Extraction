@@ -409,12 +409,47 @@ _VALIDITY_PRIORITY: dict[PhoneValidity, int] = {
 }
 
 
+def _digits(value: str) -> str:
+    return "".join(c for c in value if c.isdigit())
+
+
+def _drop_truncated(phones: list[PhoneEntry]) -> list[PhoneEntry]:
+    """Remove numbers that are a fragment of another number on the same card.
+
+    A card photographed alongside a second copy of itself, or with one edge
+    cut off, produces a partial read: a real "+066 54412 7685" alongside a
+    truncated "+4412 7685". Both are genuinely present in the transcription,
+    so grounding cannot separate them — but the fragment's digits are a
+    substring of the full number's, which is decisive.
+
+    This matters because the fragment can be the *more* parseable of the two:
+    "+4412 7685" resolves to a valid UK number while the real "+066 ..." does
+    not, so ranking by recognisability alone promoted the hallucinated
+    fragment to the primary phone and hid the number actually printed.
+    """
+    kept: list[PhoneEntry] = []
+    for entry in phones:
+        mine = _digits(entry.number)
+        # Fewer than 7 digits cannot be a dialable number in any plan, so a
+        # short value is only ever kept when nothing else subsumes it.
+        subsumed = any(
+            other is not entry
+            and len(_digits(other.number)) > len(mine)
+            and mine
+            and mine in _digits(other.number)
+            for other in phones
+        )
+        if not subsumed:
+            kept.append(entry)
+    return kept or phones
+
+
 def _rank_phones(
     phones: list[PhoneEntry], region: str | None
 ) -> list[tuple[ParsedPhone, PhoneType]]:
     """Every printed number in calling priority, deduplicated."""
     ranked: list[tuple[int, int, int, ParsedPhone, PhoneType]] = []
-    for index, entry in enumerate(phones):
+    for index, entry in enumerate(_drop_truncated(phones)):
         parsed = parse_phone(entry.number, region=region)
         if parsed is None:
             continue
@@ -449,6 +484,15 @@ def normalise(extraction: CardExtraction) -> NormalisedLead:
         "country": _clean(address_raw.country),
         "postal_code": _clean(address_raw.postal_code),
     }
+
+    # Models routinely put a postal code in the state field when a card prints
+    # them together ("NY 1600"). Left alone it reaches the user as the display
+    # location "NY, 1600", which reads as a malfunction. No administrative
+    # region is written as digits alone, so this is safe to reassign.
+    state = address["state"]
+    if state and state.replace(" ", "").isdigit():
+        address["postal_code"] = address["postal_code"] or state
+        address["state"] = None
     # Inferred from the whole card, not just the printed country: most cards
     # never state their country but do print one number in full international
     # form, which resolves every other number on the card.

@@ -367,3 +367,87 @@ class TestGrounding:
             )
         )
         assert lead.confidence["location"] < 0.8
+
+
+class TestTruncatedNumbers:
+    """A partial read must not outrank the number actually printed.
+
+    From a real card photographed beside a second copy of itself with one edge
+    cut off: the model transcribed both "+066 54412 7685" and the fragment
+    "+4412 7685". Both appear in the transcription, so grounding cannot
+    separate them — and the fragment parses as a valid UK number while the
+    real one does not, so ranking by recognisability promoted the fragment and
+    hid the printed number.
+    """
+
+    def test_a_fragment_does_not_become_the_primary_number(self) -> None:
+        lead = normalise(
+            CardExtraction(
+                raw_text="+4412 7685 +066 54412 7685 +066 10923 1853",
+                phones=[
+                    PhoneEntry(number="+4412 7685"),
+                    PhoneEntry(number="+066 54412 7685"),
+                    PhoneEntry(number="+066 10923 1853"),
+                ],
+            )
+        )
+        assert lead.phone == "+066 54412 7685"
+        assert "+44127685" not in str(lead.phone)
+
+    def test_the_other_printed_numbers_survive(self) -> None:
+        lead = normalise(
+            CardExtraction(
+                raw_text="+4412 7685 +066 54412 7685 +066 10923 1853",
+                phones=[
+                    PhoneEntry(number="+4412 7685"),
+                    PhoneEntry(number="+066 54412 7685"),
+                    PhoneEntry(number="+066 10923 1853"),
+                ],
+            )
+        )
+        assert [e["number"] for e in lead.extra_phones] == ["+066 10923 1853"]
+
+    def test_distinct_numbers_are_all_kept(self) -> None:
+        """Only a genuine substring is dropped, never a different number."""
+        lead = normalise(
+            CardExtraction(
+                raw_text="x",
+                phones=[
+                    PhoneEntry(number="+44 20 7946 0958", type=PhoneType.OFFICE),
+                    PhoneEntry(number="+44 20 7946 0959", type=PhoneType.FAX),
+                ],
+            )
+        )
+        assert lead.phone == "+442079460958"
+        assert len(lead.extra_phones) == 1
+
+    def test_a_single_number_is_never_dropped(self) -> None:
+        lead = normalise(CardExtraction(raw_text="x", phones=[PhoneEntry(number="+4412 7685")]))
+        assert lead.phone is not None
+
+
+class TestMislabelledPostalCode:
+    def test_a_numeric_state_is_treated_as_a_postal_code(self) -> None:
+        """Cards print "NY 1600" together and models split it wrongly.
+
+        Left alone the display location became "NY, 1600", which reads to a
+        user as a malfunction. No administrative region is digits alone.
+        """
+        lead = normalise(
+            CardExtraction(
+                raw_text="545 Greenview Street NY 1600",
+                address=PostalAddress(street="545 Greenview Street", city="NY", state="1600"),
+            )
+        )
+        assert lead.location == "NY"
+        assert lead.address["postal_code"] == "1600"
+        assert lead.address["state"] is None
+
+    def test_a_real_state_is_left_alone(self) -> None:
+        lead = normalise(
+            CardExtraction(
+                raw_text="San Francisco, CA, USA",
+                address=PostalAddress(city="San Francisco", state="CA", country="USA"),
+            )
+        )
+        assert lead.location == "San Francisco, CA, USA"
