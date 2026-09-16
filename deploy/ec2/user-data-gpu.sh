@@ -82,7 +82,7 @@ chmod 600 "$APP_DIR/.env"
 # --- Bring the stack up.
 cd "$APP_DIR"
 echo "MODELS_DIR=$MODELS_DIR" >> .env
-docker compose -f deploy/docker-compose.prod.yml --profile gpu up -d --build
+docker compose --env-file "$APP_DIR/.env" -f deploy/docker-compose.prod.yml --profile gpu up -d --build
 
 # --- Wait for readiness rather than declaring success on `up`. Loading 8 GB of
 # weights takes minutes, and a deploy that returns before the service works is
@@ -98,6 +98,6 @@ for _ in $(seq 1 60); do
 done
 
 echo "WARNING: the service did not report ready within 15 minutes." >&2
-docker compose -f deploy/docker-compose.prod.yml --profile gpu ps
-docker compose -f deploy/docker-compose.prod.yml --profile gpu logs --tail 50
+docker compose --env-file "$APP_DIR/.env" -f deploy/docker-compose.prod.yml --profile gpu ps
+docker compose --env-file "$APP_DIR/.env" -f deploy/docker-compose.prod.yml --profile gpu logs --tail 50
 exit 1

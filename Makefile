@@ -121,10 +121,13 @@ cards: ## Regenerate the synthetic evaluation cards
 	cd backend && uv run python ../eval/generate_cards.py --out ../eval/cards/synthetic
 
 # ---------------- deploy ----------------
+# --env-file is required, not cosmetic: compose derives its project directory
+# from the compose file's location, so with -f deploy/... it looks for
+# deploy/.env, finds nothing, and every variable fails to interpolate.
 .PHONY: deploy-gpu
 deploy-gpu: ## Bring up the GPU profile on the server
-	docker compose -f deploy/docker-compose.prod.yml --profile gpu up -d --build
+	docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile gpu up -d --build
 
 .PHONY: deploy-cpu
 deploy-cpu: ## Bring up the CPU-only profile (credit-saving mode)
-	docker compose -f deploy/docker-compose.prod.yml --profile cpu up -d --build
+	docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile cpu up -d --build

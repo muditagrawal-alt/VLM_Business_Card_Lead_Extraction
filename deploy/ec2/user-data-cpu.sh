@@ -67,7 +67,7 @@ cd "$APP_DIR"
   echo "WORKER_CONCURRENCY=1"
 } >> .env
 
-docker compose -f deploy/docker-compose.prod.yml --profile cpu up -d --build
+docker compose --env-file "$APP_DIR/.env" -f deploy/docker-compose.prod.yml --profile cpu up -d --build
 
 echo "waiting for readiness (the 4B model takes a couple of minutes to load)"
 for _ in $(seq 1 40); do
@@ -80,6 +80,6 @@ for _ in $(seq 1 40); do
 done
 
 echo "WARNING: not ready within 10 minutes." >&2
-docker compose -f deploy/docker-compose.prod.yml --profile cpu ps
-docker compose -f deploy/docker-compose.prod.yml --profile cpu logs --tail 50
+docker compose --env-file "$APP_DIR/.env" -f deploy/docker-compose.prod.yml --profile cpu ps
+docker compose --env-file "$APP_DIR/.env" -f deploy/docker-compose.prod.yml --profile cpu logs --tail 50
 exit 1

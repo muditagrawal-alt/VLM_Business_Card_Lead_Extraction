@@ -5,7 +5,9 @@ on the instance in `/opt/vlm-leads` unless stated otherwise.
 
 ```bash
 cd /opt/vlm-leads
-COMPOSE="docker compose -f deploy/docker-compose.prod.yml --profile gpu"
+# --env-file is required: compose looks for deploy/.env otherwise and every
+# interpolated variable fails with "is missing a value".
+COMPOSE="docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile gpu"
 ```
 
 ## Deploy
@@ -151,9 +153,9 @@ scp ubuntu@<gpu-ip>:/tmp/final.sql.gz .
 aws ec2 associate-address --instance-id <new-id> --allocation-id <eip-alloc-id>
 
 # On the new instance, restore and start the CPU profile.
-docker compose -f deploy/docker-compose.prod.yml --profile cpu up -d --build
-gunzip -c final.sql.gz | docker compose -f deploy/docker-compose.prod.yml \
-  exec -T postgres psql -U leads -d leads
+docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile cpu up -d --build
+gunzip -c final.sql.gz | docker compose --env-file .env \
+  -f deploy/docker-compose.prod.yml exec -T postgres psql -U leads -d leads
 
 # Finally, stop paying for the GPU.
 aws ec2 stop-instances --instance-ids <gpu-id>
