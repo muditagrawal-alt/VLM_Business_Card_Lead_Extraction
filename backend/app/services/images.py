@@ -19,6 +19,9 @@ import hashlib
 import io
 from dataclasses import dataclass
 
+# Importing the plugin is what registers the JPEG XL decoder with Pillow; it
+# exposes nothing else, hence the unused-import suppression.
+import pillow_jxl  # noqa: F401
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 # Imported from the submodule rather than the package root: pillow_heif
@@ -31,7 +34,7 @@ register_heif_opener()
 
 # Formats we will decode. A file claiming any other type is rejected before
 # Pillow is asked to open it in earnest.
-ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF", "HEIC", "MPO"}
+ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF", "HEIC", "MPO", "JXL"}
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
     "image/jpg",
@@ -39,6 +42,7 @@ ALLOWED_CONTENT_TYPES = {
     "image/webp",
     "image/heic",
     "image/heif",
+    "image/jxl",
 }
 
 # A 40 megapixel cap: far above any real card photo, far below a decompression
@@ -84,7 +88,13 @@ def _verify_decodable(raw: bytes) -> str:
         raise ImageValidationError("the file is not a readable image") from exc
 
     if fmt not in ALLOWED_FORMATS:
-        raise ImageValidationError(f"unsupported image format: {fmt or 'unknown'}")
+        # Naming the format is the difference between a user converting the
+        # file and a user assuming the upload is broken.
+        raise ImageValidationError(
+            f"{fmt} images are not supported — use JPEG, PNG, WebP, HEIC or JPEG XL"
+            if fmt
+            else "the file is not a readable image"
+        )
     if width * height > MAX_PIXELS:
         raise ImageValidationError(f"image is too large to process ({width}x{height} pixels)")
     return fmt

@@ -15,6 +15,7 @@
 # ---- Real business cards (PII — keep local) ----
 eval/cards/real/
 eval/cards/private/
+test_cards/
 
 # ---- Python ----
 __pycache__/
