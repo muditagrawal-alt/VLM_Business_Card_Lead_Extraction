@@ -25,6 +25,10 @@ x-app-env: &app-env
   VLM_CPU_ENABLED: ${VLM_CPU_ENABLED:-true}
   VLM_CPU_BASE_URL: http://llama-cpu:8080/v1
   VLM_CPU_MODEL: Qwen3VL-4B-Instruct-Q4_K_M
+  # A CPU card measured 141-171s against a 180s default, so any card slightly
+  # slower than average timed out and was reported as a transport failure.
+  # Raised well clear of the worst observed time rather than just above it.
+  VLM_CPU_TIMEOUT_S: ${VLM_CPU_TIMEOUT_S:-600}
   VLM_CLOUD_ENABLED: ${VLM_CLOUD_ENABLED:-true}
   VLM_CLOUD_BASE_URL: ${VLM_CLOUD_BASE_URL:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
   VLM_CLOUD_MODEL: ${VLM_CLOUD_MODEL:-qwen3-vl-plus}
@@ -63,10 +67,19 @@ services:
         condition: service_healthy
     # Applying migrations here rather than in a separate job keeps the schema
     # and the code that needs it in one atomic deploy step.
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000
-             --proxy-headers --forwarded-allow-ips '*'"
+    #
+    # A literal block, not a folded one. Folding preserves the newline before a
+    # more-indented line, so the `--proxy-headers` continuation arrived as its
+    # own shell command: uvicorn started silently without it, and the
+    # application saw Caddy's address as the client IP. Rate limiting and the
+    # audit hash were both keyed on the proxy rather than the caller.
+    command:
+      - sh
+      - -c
+      - |
+        alembic upgrade head
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+          --proxy-headers --forwarded-allow-ips '*' 
     mem_limit: 900m
 
   worker:
@@ -161,6 +174,13 @@ services:
       LLAMA_ARG_MMPROJ: /models/mmproj-Qwen3VL-4B-Instruct-F16.gguf
       LLAMA_ARG_CTX_SIZE: "4096"
       LLAMA_ARG_N_PARALLEL: "1"
+      # Set explicitly because llama.cpp's own heuristic chose a single thread
+      # on a two-vCPU instance — the container could see both CPUs and had no
+      # quota, it simply guessed wrong. Generation is the whole cost of a card,
+      # so that halved throughput: measured 2.26 tok/s at one thread against
+      # 3.66 at two, a 62% gain for a configuration line and no quality change.
+      # The bootstrap writes LLAMA_THREADS from nproc.
+      LLAMA_ARG_THREADS: ${LLAMA_THREADS:-2}
       LLAMA_ARG_JINJA: "1"
       LLAMA_ARG_HOST: 0.0.0.0
       LLAMA_ARG_PORT: "8080"
