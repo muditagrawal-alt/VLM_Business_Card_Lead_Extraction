@@ -84,6 +84,21 @@ services:
       api:
         condition: service_started
     command: ["python", "-m", "app.worker"]
+    # The API and worker share one image, so the worker inherits the API's
+    # HEALTHCHECK — an HTTP probe against a process that serves no HTTP. That
+    # reported a working worker as unhealthy, which is worse than no check:
+    # `docker ps` lies exactly when someone is debugging an incident.
+    #
+    # This checks what the worker actually is: a live process. procfs is used
+    # rather than pgrep because the slim image ships neither pgrep nor ps.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - grep -l app.worker /proc/*/cmdline 2>/dev/null | head -1 | grep -q .
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     # SIGTERM asks the worker to finish its current cards; give it room to.
     stop_grace_period: 120s
     mem_limit: 900m
