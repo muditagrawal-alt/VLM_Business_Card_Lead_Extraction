@@ -20,10 +20,22 @@ MAX_ATTEMPTS="${MAX_ATTEMPTS:-5}"
 #   gpu  - only the 8B
 TIERS="${TIERS:-all}"
 
-if ! command -v hf >/dev/null 2>&1; then
-  echo "error: the 'hf' CLI is required. Install it with:" >&2
-  echo "  uv tool install huggingface_hub" >&2
+# curl is the only hard requirement: it is present on every stock Ubuntu image
+# and is what the server actually uses. The `hf` CLI is faster when available
+# (parallel chunks, shared cache) but is not installed on a fresh instance, and
+# requiring it here previously aborted the whole deployment before the curl
+# fallback below could run.
+if ! command -v curl >/dev/null 2>&1; then
+  echo "error: curl is required" >&2
   exit 1
+fi
+
+if command -v hf >/dev/null 2>&1; then
+  HAVE_HF=1
+else
+  HAVE_HF=0
+  echo "note: the 'hf' CLI is not installed; downloading with curl instead."
+  echo "      (install it for faster transfers: uv tool install huggingface_hub)"
 fi
 
 mkdir -p "$MODELS_DIR"
@@ -44,16 +56,18 @@ fetch() {
     return 0
   fi
 
-  for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
-    echo "==> $file (attempt $attempt/$MAX_ATTEMPTS)"
-    if hf download "$repo" "$file" --local-dir "$MODELS_DIR"; then
-      return 0
-    fi
-    echo "    library transfer failed; retrying in $(( attempt * 10 ))s" >&2
-    sleep $(( attempt * 10 ))
-  done
+  if [[ "$HAVE_HF" == "1" ]]; then
+    for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
+      echo "==> $file (attempt $attempt/$MAX_ATTEMPTS)"
+      if hf download "$repo" "$file" --local-dir "$MODELS_DIR"; then
+        return 0
+      fi
+      echo "    library transfer failed; retrying in $(( attempt * 10 ))s" >&2
+      sleep $(( attempt * 10 ))
+    done
+    echo "==> falling back to curl for $file" >&2
+  fi
 
-  echo "==> falling back to curl for $file" >&2
   local url="https://huggingface.co/${repo}/resolve/main/${file}"
   for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
     # --speed-limit with --speed-time aborts a transfer that drops below
