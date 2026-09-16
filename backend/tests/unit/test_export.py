@@ -128,3 +128,26 @@ def test_filename_carries_the_batch_and_date(extension: str) -> None:
     name = export_filename(job_id, extension)
     assert name.startswith(f"leads_{str(job_id)[:8]}_")
     assert name.endswith(f".{extension}")
+
+
+class TestFlagCountMatchesTheTable:
+    def test_an_absent_field_does_not_count_as_needing_review(self) -> None:
+        """A card with no address is not asking to be checked.
+
+        A missing field scores zero, so counting it made the summary claim two
+        rows needed review where the table showed one caution. The table's
+        rule — a value present but doubtful — is the correct one.
+        """
+        leads = [
+            make_lead(
+                location=None,
+                confidence={"location": 0.0, "company": 1.0, "phone": 1.0},
+            )
+        ]
+        rows = dict(sheet(leads)["Summary"].iter_rows(values_only=True))
+        assert rows["Rows with a field to check"] == 0
+
+    def test_a_present_but_doubtful_field_still_counts(self) -> None:
+        leads = [make_lead(phone="981032222", confidence={"phone": 0.4})]
+        rows = dict(sheet(leads)["Summary"].iter_rows(values_only=True))
+        assert rows["Rows with a field to check"] == 1

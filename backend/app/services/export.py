@@ -87,18 +87,26 @@ def _mean_confidence(lead: Lead) -> float | None:
 
 
 def _has_flagged_field(lead: Lead) -> bool:
-    """True when any single field is below the review threshold.
+    """True when a field *that has a value* is below the review threshold.
 
     The summary counts rows this way rather than by mean confidence. A card
     with six confident fields and one doubtful one averages comfortably above
     the threshold, so a mean-based count reported "0 flagged" while a cell was
     visibly shaded amber — telling the reader the opposite of what the sheet
     showed.
+
+    Fields that are absent are excluded. A missing field scores zero, but a
+    card that simply does not print an address is not asking to be checked,
+    and counting it made the workbook claim two rows needed review where the
+    table showed one. The table's rule is the correct one, and this now
+    matches it.
     """
     if not lead.confidence:
         return False
     return any(
-        (score := lead.confidence.get(field)) is not None and score < LOW_CONFIDENCE
+        getattr(lead, field, None) is not None
+        and (score := lead.confidence.get(field)) is not None
+        and score < LOW_CONFIDENCE
         for field in SCORED_FIELDS
     )
 
