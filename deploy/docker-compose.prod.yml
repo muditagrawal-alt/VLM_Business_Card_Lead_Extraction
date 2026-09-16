@@ -172,13 +172,22 @@ services:
         condition: service_healthy
     # A nightly dump with a 14-day window. Restoring is documented in the
     # runbook; an untested backup is not a backup.
-    command: >
-      sh -c 'while true; do
-        sleep 86400;
-        pg_dump -h postgres -U ${POSTGRES_USER:-leads} -d ${POSTGRES_DB:-leads}
-          | gzip > /backups/leads-$$(date +%%Y%%m%%d).sql.gz;
-        find /backups -name "leads-*.sql.gz" -mtime +14 -delete;
-      done'
+    #
+    # Written as a literal block (|) rather than a folded one (>). Folding
+    # preserves the newline before a more-indented line, which put "| gzip"
+    # at the start of its own line and made the shell fail with
+    # `syntax error: unexpected "|"` in a restart loop. $$ escapes the dollar
+    # so the shell expands it at runtime rather than compose at parse time.
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          sleep 86400
+          pg_dump -h postgres -U ${POSTGRES_USER:-leads} -d ${POSTGRES_DB:-leads} \
+            | gzip > "/backups/leads-$$(date +%Y%m%d).sql.gz"
+          find /backups -name 'leads-*.sql.gz' -mtime +14 -delete
+        done
 
 volumes:
   postgres_data:
