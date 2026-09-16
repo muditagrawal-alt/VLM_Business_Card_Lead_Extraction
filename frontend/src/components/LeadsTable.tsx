@@ -3,6 +3,8 @@ import { AlertTriangle, Check, Cloud, Copy, Cpu, Server } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '@/api/client';
 import { Badge } from '@/components/ui/Badge';
+import { InfoTip } from '@/components/ui/InfoTip';
+import { explainConfidence, LOW_CONFIDENCE } from '@/lib/confidence';
 import { staggerAt } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import {
@@ -22,9 +24,6 @@ const HEADINGS: Record<LeadField, string> = {
   phone: 'Phone',
   email: 'Email',
 };
-
-/** Below this a value is worth a human glance before it is used. */
-const LOW_CONFIDENCE = 0.8;
 
 const TIER_ICON: Record<ProviderTier, typeof Cpu> = {
   gpu: Server,
@@ -164,10 +163,20 @@ export function LeadsTable({ leads, tasksByImage, onSelect }: Props) {
                                 <Copy className="size-3 text-muted-foreground" aria-hidden="true" />
                               )}
                             </button> : null}
-                          {uncertain ? <AlertTriangle
-                              className="mt-0.5 size-3 shrink-0 text-warning"
-                              aria-label="Worth checking"
-                            /> : null}
+                          {uncertain ? (
+                            <InfoTip
+                              label={
+                                explainConfidence(field, lead) ??
+                                'This value is worth checking against the card.'
+                              }
+                              className="mt-0.5 shrink-0"
+                            >
+                              <AlertTriangle
+                                className="size-3 text-warning"
+                                aria-hidden="true"
+                              />
+                            </InfoTip>
+                          ) : null}
                         </span>
                       ) : (
                         // An em dash, not a blank cell: it shows the card
