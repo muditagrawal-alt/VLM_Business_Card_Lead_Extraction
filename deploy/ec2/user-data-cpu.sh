@@ -60,6 +60,9 @@ chmod 600 "$APP_DIR/.env"
 cd "$APP_DIR"
 {
   echo "MODELS_DIR=$MODELS_DIR"
+  # llama.cpp mis-detects the usable CPU count inside a container, so it is
+  # stated explicitly from the host.
+  echo "LLAMA_THREADS=$(nproc)"
   # There is no GPU tier here, so the chain must not waste a timeout on it.
   echo "VLM_GPU_ENABLED=false"
   # One card at a time: llama.cpp on two vCPUs gains nothing from parallel

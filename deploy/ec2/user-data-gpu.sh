@@ -81,7 +81,13 @@ chmod 600 "$APP_DIR/.env"
 
 # --- Bring the stack up.
 cd "$APP_DIR"
-echo "MODELS_DIR=$MODELS_DIR" >> .env
+{
+  echo "MODELS_DIR=$MODELS_DIR"
+  # llama.cpp mis-detects the usable CPU count inside a container, so it is
+  # stated explicitly from the host. Matters for the CPU fallback tier, which
+  # runs alongside the GPU one.
+  echo "LLAMA_THREADS=$(nproc)"
+} >> .env
 docker compose --env-file "$APP_DIR/.env" -f deploy/docker-compose.prod.yml --profile gpu up -d --build
 
 # --- Wait for readiness rather than declaring success on `up`. Loading 8 GB of
