@@ -5,7 +5,6 @@
 SHELL := /bin/bash
 
 MODELS_DIR := models
-MLX_4B     := $(MODELS_DIR)/mlx/Qwen3-VL-4B-Instruct-8bit
 LLAMA_8B   := $(MODELS_DIR)/Qwen3VL-8B-Instruct-Q8_0.gguf
 MMPROJ_8B  := $(MODELS_DIR)/mmproj-Qwen3VL-8B-Instruct-F16.gguf
 LLAMA_4B   := $(MODELS_DIR)/Qwen3VL-4B-Instruct-Q4_K_M.gguf
@@ -37,19 +36,6 @@ models: ## Download Qwen3-VL GGUF weights (~13 GB; TIERS=cpu for just the 4B)
 llama-gpu: ## Serve Qwen3-VL-8B on 127.0.0.1:18080 (Metal locally)
 	llama-server -m $(LLAMA_8B) --mmproj $(MMPROJ_8B) \
 		-ngl 99 -c 8192 --parallel 2 --jinja --host 127.0.0.1 --port 18080
-
-.PHONY: mlx
-mlx: ## Serve Qwen3-VL-4B via MLX on 127.0.0.1:18082 (fastest on Apple Silicon)
-	mlx-openai-server launch \
-		--model-path $(MLX_4B) \
-		--model-type multimodal \
-		--served-model-name Qwen3-VL-4B-Instruct-8bit \
-		--context-length 8192 \
-		--host 127.0.0.1 --port 18082
-
-.PHONY: mlx-models
-mlx-models: ## Download the MLX weights used by `make mlx`
-	./scripts/download_mlx_model.sh
 
 .PHONY: llama-cpu
 llama-cpu: ## Serve Qwen3-VL-4B on 127.0.0.1:18081 (fallback tier)
