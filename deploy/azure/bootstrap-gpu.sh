@@ -27,7 +27,13 @@ if [[ -d "$APP_DIR/.git" ]]; then
 else
   apt-get update
   apt-get install -y git curl ca-certificates
-  git clone --depth 1 "$REPO_URL" "$APP_DIR"
+  # The directory may already hold .env, which is copied in before this
+  # script runs, and a plain clone refuses a non-empty target.
+  mkdir -p "$APP_DIR"
+  git -C "$APP_DIR" init -q -b main
+  git -C "$APP_DIR" remote add origin "$REPO_URL"
+  git -C "$APP_DIR" fetch -q --depth 1 origin main
+  git -C "$APP_DIR" checkout -q -B main origin/main
 fi
 
 # --- NVIDIA driver. The Microsoft-maintained NvidiaGpuDriverLinux VM extension
