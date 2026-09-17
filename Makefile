@@ -103,16 +103,16 @@ images: ## Build both container images exactly as CI and deployment do
 	docker build -t vlm-leads-web -f frontend/Dockerfile .
 
 .PHONY: eval
-eval: ## Evaluate the CPU tier (4B on :8081) against the card set
+eval: ## Evaluate the CPU tier (4B on :18081) against the card set
 	cd backend && uv run python ../eval/run_eval.py \
-		--tier cpu --base-url http://127.0.0.1:8081/v1 \
+		--tier cpu --base-url http://127.0.0.1:18081/v1 \
 		--model Qwen3VL-4B-Instruct-Q4_K_M \
 		--json-out ../eval/results/latest-4b.json
 
 .PHONY: eval-gpu
-eval-gpu: ## Evaluate the primary tier (8B on :8080) against the card set
+eval-gpu: ## Evaluate the primary tier (8B on :18080) against the card set
 	cd backend && uv run python ../eval/run_eval.py \
-		--tier gpu --base-url http://127.0.0.1:8080/v1 \
+		--tier gpu --base-url http://127.0.0.1:18080/v1 \
 		--model Qwen3VL-8B-Instruct-Q8_0 --timeout 600 \
 		--json-out ../eval/results/latest-8b.json
 
