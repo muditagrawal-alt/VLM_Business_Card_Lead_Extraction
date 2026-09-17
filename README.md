@@ -18,9 +18,9 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 ### Watch the demo
 
-[![Two-minute narrated demo: upload, extraction on the T4, review and correction, export, and the API](docs/media/demo-poster.png)](docs/media/demo.mp4)
+[![Narrated demo: upload, extraction on the T4, review and correction, and export](docs/media/demo-poster.png)](docs/media/demo.mp4)
 
-<div align="center"><sub>▶ Ninety seconds, subtitled, recorded against the live deployment; the batch is shown at 4× speed, marked on screen. Music: "Inspired" by Kevin MacLeod (incompetech.com), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</sub></div>
+<div align="center"><sub>▶ Under ninety seconds, subtitled, recorded against the live deployment; the batch is shown at 4× speed, marked on screen. Music: "Inspired" by Kevin MacLeod (incompetech.com), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</sub></div>
 
 ---
 
