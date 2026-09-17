@@ -16,6 +16,7 @@
 eval/cards/real/
 eval/cards/private/
 test_cards/
+real_test_cards/
 
 # ---- Python ----
 __pycache__/

@@ -11,6 +11,7 @@ without a model, a database or a network.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -239,6 +240,21 @@ def _clean(value: str | None) -> str | None:
     if text.lower() in {"null", "none", "n/a", "na", "-", "--", "unknown", "not provided"}:
         return None
     return text
+
+
+_TRADEMARK_MARKS = re.compile(r"[\u00ae\u2122\u00a9\u2120]")  # ® ™ © ℠
+
+
+def _strip_marks(company: str | None) -> str | None:
+    """Drop trademark symbols a card prints as part of its wordmark.
+
+    ``BAJAJCAPITAL®`` is the company Bajaj Capital, not a company whose name
+    ends in ®; the symbol survives transcription because the model is told to
+    copy what is printed, so it is removed here rather than in the prompt.
+    """
+    if company is None:
+        return None
+    return _clean(_TRADEMARK_MARKS.sub("", company))
 
 
 def _strip_affixes(name: str | None) -> str | None:
@@ -512,7 +528,7 @@ def normalise(extraction: CardExtraction) -> NormalisedLead:
         first_name=first_name,
         last_name=last_name,
         position=_clean(extraction.position),
-        company=_clean(extraction.company),
+        company=_strip_marks(_clean(extraction.company)),
         location=build_location(address),
         phone=primary_phone[0].value if primary_phone else None,
         email=emails[0] if emails else None,

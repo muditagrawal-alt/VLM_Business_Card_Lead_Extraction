@@ -198,6 +198,21 @@ class TestNames:
         assert split_name(None, None, None) == (None, None)
 
 
+class TestCompany:
+    def test_trademark_symbols_are_stripped(self) -> None:
+        """A wordmark's ® is part of the logo, not part of the name."""
+        lead = normalise(
+            CardExtraction(raw_text="BAJAJCAPITAL® Anil Chopra", company="BAJAJCAPITAL®"),
+        )
+        assert lead.company == "BAJAJCAPITAL"
+        # The transcription still grounds the cleaned value.
+        assert lead.confidence["company"] == 1.0
+
+    def test_a_company_that_is_only_a_mark_becomes_null(self) -> None:
+        lead = normalise(CardExtraction(raw_text="™", company="™"))
+        assert lead.company is None
+
+
 class TestLocation:
     @pytest.mark.parametrize(
         ("address", "expected"),
