@@ -50,7 +50,40 @@ kernels compiled and the projector ran for the first time, and everything
 after them took 9–13 s. Run 6, on the warm server, cleared the batch in 41 s
 of wall-clock time with two cards in flight.
 
-### This card set is now saturated
+### Real cards
+
+Two batches of real cards were run through the live deployment (GPU tier) and
+graded by hand against the images. Neither set is published: the web images
+show named people and the scans belong to the author's family.
+
+| Set | Cards | Fields correct | Perfect cards | Median latency |
+|---|---|---|---|---|
+| Business-card images found on the web (JPEG, WebP, JXL) | 9 | 61 / 63 — 96.8 % | 7 / 9 | 10.2 s |
+| Phone photos of cards from a wallet, front and back | 14 sides | 93 / 98 — 94.9 % | 11 / 14 | 10.7 s |
+
+What the misses were, because the number alone hides the pattern:
+
+- **Company inferred from a domain** when no company name is printed
+  (`realboxtech.com`). Defensible, but it is inference, and the design says
+  not to.
+- **"Any City, ST" shortened to "Any, ST"** — the model dropped a word from a
+  location.
+- **Two Devanagari words misread** on a Hindi-only side (सौरभ → सोरम,
+  सदस्य → सदर्य). The English side of the same card was perfect, which is why
+  the prompt prefers the Latin form when both are printed.
+- **A back side with no person on it** got a department line as the position
+  and a URL as the company. Backs are logos and addresses; the fronts alone
+  scored 48 / 49.
+- **`BAJAJCAPITAL®`** — the trademark symbol came through with the wordmark.
+  Fixed in normalisation; the other misses are model behaviour.
+
+Every phone number was transcribed digit-for-digit. Numbers printed without a
+country code on cards that give no other country signal (three of the seven
+Indian fronts) were kept as printed and flagged, which is the designed
+behaviour — the alternative is guessing +91 — and is the most common reason a
+real card shows an amber cell.
+
+### The synthetic set is now saturated
 
 Both models score 100 %, so **the synthetic set can no longer tell them apart.**
 It was built to catch reasoning and schema failures, it caught a significant
@@ -135,7 +168,6 @@ Not yet measured, and required before any accuracy claim is made in the README:
 - **Cards hard enough to separate the models.** This is now the top priority:
   with the set saturated, the next run needs input that actually discriminates.
 
-- **Real photographed cards** — phone camera, uneven lighting, angle, glare.
 - **A public business-card dataset**, for volume and independence from cards
   chosen by the same person who wrote the prompt.
 - **Non-Latin scripts**, where transliteration is the expected failure.
