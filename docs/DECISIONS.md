@@ -167,7 +167,7 @@ the better engineering.
 
 ---
 
-## 9. One EC2 instance, two compose profiles
+## 9. One VM, two compose profiles
 
 **Chosen:** a single instance running Docker Compose, with `gpu` and `cpu`
 profiles over one compose file.
@@ -194,3 +194,31 @@ actually run the model.
 
 Stating the constraint, the cost per hour, and the mitigation is more useful to
 an evaluator than a claim that quietly does not hold.
+
+---
+
+## 11. The GPU tier runs on Azure, the rest of the design stays on AWS
+
+**Chosen:** serve the public deployment from an Azure `Standard_NC4as_T4_v3`,
+and keep the AWS deployment path first-class and documented.
+
+The brief names AWS, and AWS is where the stack was built and first went live —
+on an `m7i-flex.large`, CPU profile, at about 113 s per card. Getting the GPU
+tier there needs a G-instance vCPU quota that a new account does not have, and
+the request was declined at first line; it is with the EC2 service team on
+appeal. GCP was tried and stalled on a prepayment step for Indian accounts.
+Azure's route — upgrade the trial subscription, then a quota support ticket,
+which is free on every plan — was approved in about fifteen minutes.
+
+The alternatives were to wait, or to ship the CPU deployment as the final
+answer. Waiting had no bound. Shipping 113 s per card as the demonstration
+would misrepresent a system whose primary tier was designed for a T4, and the
+evaluation's whole latency story would rest on a projection.
+
+What made the move cheap is that nothing in the stack is cloud-specific: the
+Compose file, the images, the model download and the readiness check all run
+unchanged, and the EC2 bootstrap already assumed only "an image with the NVIDIA
+driver and container toolkit". Azure's stock Ubuntu image lacks those two
+things, so `deploy/azure/bootstrap-gpu.sh` installs them and hands over to the
+EC2 script. That is the entire Azure-specific surface, and the AWS GPU
+deployment is one command away when its quota lands.

@@ -16,7 +16,7 @@ flowchart LR
   W -.->|tier 3| M[Alibaba Model Studio<br/>qwen3-vl-plus]
   B[backup] --> P
 
-  subgraph instance["One EC2 instance"]
+  subgraph instance["One VM (EC2 or Azure)"]
     C; A; S; P; F; W; G; Cp; B
   end
 ```
