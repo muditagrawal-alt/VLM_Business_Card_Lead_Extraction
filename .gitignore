@@ -54,3 +54,6 @@ logs/
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# Vendored at build time (make docs-assets locally).
+backend/app/static/swagger-ui/

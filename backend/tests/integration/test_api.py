@@ -282,3 +282,28 @@ class TestDeletion:
 async def test_api_documentation_is_served(api, path: str) -> None:
     client, _ = api
     assert (await client.get(path)).status_code == 200
+
+
+async def test_docs_page_has_no_inline_script(api) -> None:
+    """The edge's CSP is script-src 'self': every script must be a file."""
+    client, _ = api
+    html = (await client.get("/api/docs")).text
+    assert "<script>" not in html
+    assert 'src="/api/docs/init.js"' in html
+    assert "swagger-ui-bundle.js" in html
+
+    init = await client.get("/api/docs/init.js")
+    assert init.status_code == 200
+    assert init.headers["content-type"].startswith("application/javascript")
+    assert '"/api/openapi.json"' in init.text
+
+
+async def test_docs_assets_are_same_origin_when_vendored(api) -> None:
+    from app.docs import assets_available
+
+    if not assets_available():
+        pytest.skip("docs assets not fetched (make docs-assets)")
+    client, _ = api
+    html = (await client.get("/api/docs")).text
+    assert "cdn.jsdelivr.net" not in html
+    assert (await client.get("/api/docs-static/swagger-ui-bundle.js")).status_code == 200

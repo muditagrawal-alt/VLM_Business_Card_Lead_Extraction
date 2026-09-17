@@ -17,6 +17,7 @@ from app.core.db import dispose_engine
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.rate_limit import limiter
+from app.docs import install_docs
 from app.services.storage import LocalDiskStorage
 from app.vlm.chain import ProviderChain
 
@@ -56,10 +57,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "across inference tiers."
         ),
         version="1.0.0",
-        docs_url="/api/docs",
+        # The stock docs page is CSP-incompatible in production; app.docs
+        # serves a same-origin replacement at the same path.
+        docs_url=None,
+        redoc_url=None,
         openapi_url="/api/openapi.json",
         lifespan=lifespan,
     )
+    install_docs(app, docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.settings = settings
 
     app.state.limiter = limiter

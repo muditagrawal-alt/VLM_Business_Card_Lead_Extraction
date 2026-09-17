@@ -31,6 +31,10 @@ install-frontend: ## Install Node dependencies
 models: ## Download Qwen3-VL GGUF weights (~13 GB; TIERS=cpu for just the 4B)
 	./scripts/download_models.sh
 
+.PHONY: docs-assets
+docs-assets: ## Fetch the Swagger UI files /api/docs serves same-origin (done in the image build)
+	./scripts/fetch_docs_assets.sh
+
 # ---------------- local inference ----------------
 .PHONY: llama-gpu
 llama-gpu: ## Serve Qwen3-VL-8B on 127.0.0.1:18080 (Metal locally)

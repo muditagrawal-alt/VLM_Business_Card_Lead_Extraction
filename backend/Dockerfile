@@ -21,6 +21,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY app ./app
 COPY alembic ./alembic
+
+# Swagger UI is served same-origin so the documentation page satisfies the
+# edge's Content-Security-Policy. Pinned and integrity-checked like any other
+# dependency; only the three files the page needs are kept.
+ADD --checksum=sha256:434c69385aa02154348e6dcce0076df3a25ed88f673ac16cf4fed3fcf62c3b1b \
+    https://registry.npmjs.org/swagger-ui-dist/-/swagger-ui-dist-5.33.0.tgz /tmp/swagger-ui-dist.tgz
+RUN mkdir -p app/static/swagger-ui \
+    && tar -xzf /tmp/swagger-ui-dist.tgz -C app/static/swagger-ui --strip-components=1 \
+        package/swagger-ui-bundle.js package/swagger-ui.css package/favicon-32x32.png package/LICENSE \
+    && rm /tmp/swagger-ui-dist.tgz
 COPY alembic.ini ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
