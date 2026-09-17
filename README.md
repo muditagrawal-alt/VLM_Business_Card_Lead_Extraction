@@ -16,6 +16,12 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 <div align="center"><sub>Eight cards, uploaded to the live deployment and extracted on the GPU tier in real time. No cuts.</sub></div>
 
+### Watch the demo
+
+[![Two-minute narrated demo: upload, extraction on the T4, review and correction, export, and the API](docs/media/demo-poster.png)](docs/media/demo.mp4)
+
+<div align="center"><sub>▶ Two minutes, subtitled, recorded against the live deployment. Music: "Inspired" by Kevin MacLeod (incompetech.com), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</sub></div>
+
 ---
 
 ## Contents
@@ -122,6 +128,13 @@ Every figure here comes from `eval/run_eval.py` or from the deployed service, no
 | Qwen3-VL-8B Q8_0 | Apple Silicon, Metal | 768 px | **100.0 %** | 8 / 8 | 64.4 s p50 |
 | Qwen3-VL-4B Q4_K_M | Apple Silicon, Metal | 768 px | **100.0 %** | 8 / 8 | 20.6 s p50 |
 | Qwen3-VL-4B Q4_K_M | AWS `m7i-flex.large`, 2 vCPU | 768 px | — | 7 / 8 completed | 113 s median; one card hit the 600 s ceiling |
+
+Beyond the synthetic set, two batches of **real** cards were run through the live deployment and graded by hand against the images (the cards themselves are not published — they belong to real people):
+
+| Set | Cards | Fields correct | Perfect cards | Notes |
+|---|---|---|---|---|
+| Business-card images from the web | 9 | 61 / 63 (96.8 %) | 7 / 9 | Both misses are judgement calls: a domain used as the company when none is printed; "Any City" shortened to "Any". Every placeholder number (`+123-456-7890`) was kept as printed and flagged. |
+| Scanned cards from a wallet, front and back | 14 sides | 93 / 98 (94.9 %) | 11 / 14 | Fronts alone: 48 / 49. Misses: two Devanagari words on a Hindi-only side, a department line read as a position on a back, and a ® that is now stripped. |
 
 The card set is eight synthetic cards built around the layouts that break extraction: a dark centred card, one with no job title, a first name given only as an initial, an honorific and suffix, two people on one card, a slogan where a company name usually sits, and a card listing mobile, office and fax.
 
