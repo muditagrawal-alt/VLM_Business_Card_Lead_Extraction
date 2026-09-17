@@ -66,7 +66,7 @@ Three properties make the output usable rather than merely plausible:
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph browser [Browser]
         UI[React SPA]
     end
@@ -76,7 +76,7 @@ flowchart LR
         PG[("PostgreSQL 16<br/>leads + work queue")]
         W[Worker]
         subgraph chain ["Inference chain · one circuit breaker per tier"]
-            direction TB
+            direction LR
             T1["Tier 1 · Qwen3-VL-8B Q8_0<br/>llama.cpp on the T4"]
             T2["Tier 2 · Qwen3-VL-4B Q4_K_M<br/>llama.cpp on CPU"]
         end
