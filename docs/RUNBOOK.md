@@ -28,6 +28,34 @@ curl -fsS http://localhost/api/v1/ready
 Migrations run as part of the API container's start command, so the schema and
 the code that needs it move together.
 
+### Azure
+
+The stack is not tied to EC2. On Azure the equivalent instance is
+`Standard_NC4as_T4_v3` (4 vCPU, 28 GB, one T4), and the only difference is
+that the stock Ubuntu image ships neither the NVIDIA driver nor the container
+toolkit. `deploy/azure/bootstrap-gpu.sh` installs both and then runs the EC2
+script unchanged.
+
+```bash
+# From a workstation with the Azure CLI signed in. The NSG must already allow
+# 22 from your address and 80/443 from anywhere.
+az vm create -g vlm-leads-rg -n vlm-gpu -l centralus \
+  --size Standard_NC4as_T4_v3 --image Canonical:ubuntu-24_04-lts:server:latest \
+  --os-disk-size-gb 100 --admin-username ubuntu --ssh-key-values ~/.ssh/id_rsa.pub \
+  --public-ip-address vlm-ip --vnet-name vlm-vnet --subnet app --nsg ""
+az vm extension set -g vlm-leads-rg --vm-name vlm-gpu \
+  --publisher Microsoft.HpcCompute --name NvidiaGpuDriverLinux
+
+# Then exactly as on EC2: .env first, bootstrap second.
+scp .env ubuntu@<ip>:/tmp/.env
+ssh ubuntu@<ip> 'sudo mkdir -p /opt/vlm-leads && sudo mv /tmp/.env /opt/vlm-leads/.env'
+ssh ubuntu@<ip> 'curl -fsSL https://raw.githubusercontent.com/muditagrawal-alt/VLM_Business_Card_Lead_Extraction/main/deploy/azure/bootstrap-gpu.sh | sudo bash'
+```
+
+The T4 family has zero quota on a new subscription and the self-service
+increase is refused; a *Service and subscription limits* support request for
+`Standard NCASv3_T4 Family vCPUs` → 4 is free on every plan.
+
 ## Roll back
 
 ```bash
