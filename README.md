@@ -10,6 +10,8 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 [Setup guide](docs/SETUP.md) · [Architecture](docs/ARCHITECTURE.md) · [Design decisions](docs/DECISIONS.md) · [Evaluation](docs/EVALUATION.md) · [Runbook](docs/RUNBOOK.md)
 
+<sub>O-Hive take-home, Assignment 1 · **Mudit Agrawal**</sub>
+
 </div>
 
 ![Eight business cards uploaded, extracted on the GPU tier in forty-one seconds, reviewed in the detail drawer, and exported to Excel](docs/images/walkthrough.gif)
@@ -24,6 +26,18 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 ---
 
+## For the reviewer
+
+| Asked for | Where it is |
+|---|---|
+| Publicly accessible deployed application | <https://muditagrawal-20-80-103-145.sslip.io> — see [Live deployment](#live-deployment) |
+| Source code | This repository: <https://github.com/muditagrawal-alt/VLM_Business_Card_Lead_Extraction> |
+| Setup and deployment instructions | [Quick start](#quick-start) and [Deployment](#deployment) here; the full walkthrough for both clouds in [docs/SETUP.md](docs/SETUP.md) |
+| Architecture and major technical decisions | [How it works](#how-it-works), then [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md) |
+| Libraries, frameworks, pretrained models, external components | [Components](#libraries-frameworks-models-and-external-components) |
+| Known limitations and what I would improve | [Known limitations and what I would improve with more time](#known-limitations-and-what-i-would-improve-with-more-time) |
+| AI usage | [AI Usage](#ai-usage) |
+
 ## Contents
 
 - [Live deployment](#live-deployment)
@@ -37,8 +51,10 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 - [Testing](#testing)
 - [Deployment](#deployment)
 - [Project structure](#project-structure)
-- [Known limits](#known-limits)
+- [Libraries, frameworks, models and external components](#libraries-frameworks-models-and-external-components)
+- [Known limitations and what I would improve with more time](#known-limitations-and-what-i-would-improve-with-more-time)
 - [Privacy and data handling](#privacy-and-data-handling)
+- [AI Usage](#ai-usage)
 
 ---
 
@@ -279,16 +295,91 @@ docs/             Setup guide, architecture, decisions, evaluation, runbook
 scripts/          Model download
 ```
 
-**Stack:** Python 3.12 · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL 16 · llama.cpp · React 19 · TypeScript · Vite · Tailwind CSS 4 · TanStack Query · Motion · openpyxl · Docker · Caddy
+## Libraries, frameworks, models and external components
 
-## Known limits
+### Pretrained models
 
-- **Accuracy on real photographs is not yet measured.** The evaluation set is synthetic.
-- **One person per card.** A card showing two contacts yields the more prominent one, with the other described in the notes field.
-- **Front and back are separate cards.** They are not merged.
-- **PDFs are not accepted** — images only, stated in the upload error.
-- **Non-Latin scripts are transcribed, not transliterated**, which is correct but untested for accuracy.
-- **Single instance.** Storage is a local volume; scaling horizontally needs the S3 backend the storage interface already allows for.
+| Model | Format | Where it runs | Source |
+|---|---|---|---|
+| **Qwen3-VL-8B-Instruct** | GGUF, Q8_0 (8.3 GB) + F16 vision projector (1.1 GB) | Tier 1, llama.cpp on the T4 | [`Qwen/Qwen3-VL-8B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF), Apache-2.0 |
+| **Qwen3-VL-4B-Instruct** | GGUF, Q4_K_M (2.4 GB) + F16 projector (0.8 GB) | Tier 2, llama.cpp on CPU | [`Qwen/Qwen3-VL-4B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF), Apache-2.0 |
+| qwen3-vl-plus | hosted | Tier 3, optional, off unless a key is set | Alibaba Model Studio, OpenAI-compatible endpoint |
+
+No other model, OCR engine or embedding is used. The VLM is the OCR. Weights are downloaded by `scripts/download_models.sh` with resume and GGUF magic-byte verification; they are never committed.
+
+### Inference and data
+
+| Component | Version | Role |
+|---|---|---|
+| llama.cpp `llama-server` | `ghcr.io/ggml-org/llama.cpp:server-cuda` / `:server` | Serves both GGUF models with an OpenAI-compatible API; compiles the JSON schema to a GBNF grammar so output cannot be malformed |
+| PostgreSQL | 16 | Leads, batches, and the work queue (`FOR UPDATE SKIP LOCKED` with leases) — no broker |
+| Caddy | 2 | TLS from Let's Encrypt, static SPA, `/api` reverse proxy, security headers |
+
+### Backend (Python 3.12)
+
+| Library | Version | Role |
+|---|---|---|
+| FastAPI · uvicorn | 0.141 · 0.53 | HTTP API; the same image runs the worker |
+| SQLAlchemy (async) · asyncpg · Alembic | 2.0.52 · 0.31 · 1.20 | ORM, driver, migrations (applied forward, back and forward again in CI) |
+| Pydantic · pydantic-settings | 2.13 · 2.15 | One schema is the VLM grammar, the API contract and the Excel columns |
+| httpx · tenacity | 0.28 · 9 | Provider client with timeouts and retries |
+| phonenumbers | 9.0 | E.164 parsing with three validity levels, region inferred from sibling numbers, TLD or country |
+| email-validator · nameparser | 2.3 · 2.3 | Email syntax, honorific and suffix stripping |
+| Pillow · pillow-heif · pillow-jxl-plugin | 12.3 · 1.7 · 1.3 | EXIF orientation, metadata stripping, downscaling; HEIC and JPEG XL input |
+| openpyxl | 3.1 | Formatted workbook export with a summary sheet |
+| structlog · slowapi | 26.1 · 0.1 | Structured logging; rate limiting on the endpoints that cost inference |
+| Swagger UI | 5.33, vendored at build | API documentation served same-origin so it works under the CSP |
+
+### Frontend (TypeScript 5.7)
+
+| Library | Version | Role |
+|---|---|---|
+| React · Vite | 19.2 · 6 | SPA, hash-routed, two views |
+| Tailwind CSS | 4 | Styling; tokens taken from O-HIVE's design system |
+| TanStack Query · TanStack Table | 5 · 8 | Polling job state, the leads grid |
+| Motion | 13 | Progress and drawer animation, honouring reduced-motion |
+| Radix UI (dialog, tooltip, progress) · lucide-react | 1.1 · 0.474 | Accessible primitives and icons |
+| react-dropzone · browser-image-compression | 14 · 2 | Drop zone; downscale before upload so a 50-card batch is not 500 MB |
+| zod | 3.24 | API response validation at the boundary |
+
+### Development and delivery
+
+pytest · pytest-asyncio · respx · aiosqlite · ruff · pyright · Vitest · Testing Library · ESLint · Prettier · Playwright (screenshots and the demo recording) · Docker Compose · GitHub Actions.
+
+### Cloud and external services
+
+| Service | Used for |
+|---|---|
+| Azure `Standard_NC4as_T4_v3`, Central US | The live GPU deployment (quota via support ticket, approved in ~15 min) |
+| AWS EC2 `m7i-flex.large`, us-east-1 | The first deployment, CPU profile; the GPU quota appeal is with the EC2 service team |
+| sslip.io · Let's Encrypt | A public host name and a real certificate without buying a domain |
+| Hugging Face Hub | Model weights, fetched at deploy time |
+| Alibaba Model Studio | Optional hosted tier 3 |
+| incompetech.com | Demo-video music, *"Inspired"* by Kevin MacLeod, CC BY 4.0 |
+
+## Known limitations and what I would improve with more time
+
+### Limitations as shipped
+
+| Limitation | Why | How it could be lifted |
+|---|---|---|
+| **A number printed without a country code, on a card with no other country signal, is kept as printed and flagged** | The alternative is guessing a region, and an early build that assumed `+1` fabricated valid-looking US numbers for Indian cards | Infer the region from the postal-code format and city; or a per-batch default region the user sets once |
+| **Non-Latin text is transcribed, not transliterated**, and Devanagari is less reliable than Latin | Two words on a Hindi-only side were misread; the English side of the same card was perfect | Prefer the Latin side when both exist (done); measure Devanagari on a larger set; consider a larger projector resolution for dense scripts |
+| **One person per card, and a card's front and back are separate rows** | The schema is one lead per image | Merge sides that share an email or phone; a "two people" card could yield two rows |
+| **The model will sometimes use a domain as the company** when no company name is printed | Defensible inference, but the design says never to invent | Reject a company that equals the website's domain at normalisation |
+| **PDFs are not accepted** | Images only; the error says so | Rasterise the first page with `pdfium` |
+| **The first card after a server restart takes ~34 s** | CUDA kernels compile and the projector runs cold | Send a warm-up request at boot before reporting ready |
+| **Single instance, local storage** | Enough for the assignment; the storage interface already allows an S3 backend | S3 for images, more than one worker, a managed PostgreSQL |
+| **No login** | Out of scope per the brief; a passcode is available via `APP_ACCESS_CODE` | Proper auth if it were shared beyond a review |
+
+### What I would do first
+
+- **A harder evaluation set with ground truth.** The synthetic set is saturated at 100 % and the real cards were graded by hand. Two hundred photographed cards with agreed answers would turn "96.8 %" into a number that can be tracked release to release.
+- **A scale-to-zero GPU tier.** The app on a small always-on VM, the T4 started when a batch arrives and deallocated after fifteen idle minutes. It is designed — the GPU is already just a URL to the worker — but it trades a three-minute cold start for a 95 % cost cut, and for a review window the warm GPU mattered more.
+- **Bring the GPU deployment back to AWS** when the quota appeal lands. It is one command; the AWS path is documented and tested.
+- **Region inference from the address**, so Indian cards stop showing amber on every mobile number.
+- **The hosted tier in production.** It is implemented and tested, but the live deployment runs without its key, so the third tier has never taken a card there.
+
 
 ## Privacy and data handling
 
@@ -297,6 +388,48 @@ scripts/          Model download
 - Client IP addresses are stored **only as a salted hash**: enough to rate limit and audit, not enough to make the database personal data on its own.
 - With the hosted tier enabled, a card that both self-hosted tiers fail is sent to Alibaba Model Studio in Singapore. Rows processed that way are badged in the UI, and the tier can be switched off entirely.
 - Card text is treated as data, never as instruction. Grammar-constrained output means text printed on a card cannot change the response shape.
+
+## AI Usage
+
+### Tools
+
+**Claude Code** (Anthropic) was my development assistant for the whole project: implementation, tests, deployment scripting, the evaluation harness, and the first drafts of the documentation. I also used its browser and Playwright tooling to take the screenshots and record the demo. No other AI tool was used, and no AI is in the product's request path except the Qwen model that *is* the product.
+
+### How it was used
+
+The working arrangement was that I owned the problem, the decisions and the acceptance bar, and used the assistant as a fast implementer that had to show its work:
+
+- **I set the scope and the constraints up front** — the seven fields the brief asks for, self-hosted Qwen with an offline-first build, a production-grade bar rather than a prototype, no versions or milestones ("we are building the final end product"), and O-HIVE's own design language for the interface.
+- **I decided the shape of the system**: GPU primary, CPU fallback, hosted fallback, in that order; PostgreSQL rather than a broker; a single VM with two Compose profiles; no authentication for the assignment.
+- **I supplied the test material and the verdicts.** The real cards came from the web and from a wallet at home; I looked at what came back, said which extractions were wrong, and sent them back to be fixed one at a time. The evaluation set, the ground truth, and the rule that a number is *never* guessed all came out of those rounds.
+- **I ran the cloud accounts** — AWS, then GCP, then Azure — filed the quota requests and the appeal, and chose Azure when it was the one that said yes.
+- The assistant did most of the implementation under that direction — code, tests, deployment scripts — ran the evaluation sweeps, drafted the docs, and did the debugging legwork when something broke.
+
+### Recommendations adopted, after they earned it
+
+| Recommendation | Why it was kept |
+|---|---|
+| **No separate OCR engine.** My first plan was Docling + EasyOCR feeding the model. The assistant argued that Qwen3-VL already reads text better than a CRAFT/CRNN pipeline, that Docling is a document converter that would just call EasyOCR for images, and that the ~800 MB of RAM would buy a bigger model instead | I took the argument; the results held. Every card in the evaluation set is read correctly with no OCR stage at all |
+| **Qwen3-VL-8B Q8_0 as the primary, 4B Q4_K_M as the fallback**, both on llama.cpp | The 4B matches the 8B on the evaluation set and is a third the latency on CPU, which is what made a CPU fallback tier credible |
+| **The queue lives in PostgreSQL** (`SKIP LOCKED` with leases) rather than Redis or Celery | One fewer service to operate, crash recovery for free, and the queue and the leads are in one transaction |
+| **Per-tier circuit breakers** | Without them a dead GPU container costs every card in a batch a full timeout before falling through |
+| **Required-but-nullable fields in the grammar** | This was a fix to the assistant's own first design — see below — and it took the evaluation from 82.1 % to 100 % |
+| **Self-hosting Swagger UI instead of loosening the Content-Security-Policy** | The demo recording showed the docs page blank in production. The assistant proposed vendoring the assets over relaxing the policy; that is the right instinct and it is what shipped |
+
+### Recommendations rejected or modified
+
+| What was proposed | What happened to it |
+|---|---|
+| **Optional fields in the output schema** (the first implementation) | **Modified after measurement.** The model silently skipped optional fields and scored 82.1 %. Making every field required, with `null` an explicit answer, took it to 100 %. The assistant designed the original; the evaluation caught it |
+| **Falling back to a US region when parsing a number with no country code** | **Rejected.** It produced a "valid" `+1 705 555 9999` for an Indian card — fabricated data with a confidence score. Replaced with region inference from sibling numbers, the email domain and the printed country, and *no* guess otherwise. A flagged number beats a wrong one |
+| **A projected T4 latency of "2–4 s per card"** in an early README draft | **Rejected as a claim.** Nothing that was not measured goes in the README. The measured figure on the live deployment is 9–12 s, and that is what it says |
+| **MLX on Apple Silicon** to cut local latency further | **Abandoned.** The downloads failed repeatedly on my network and the gain was unverified, so the script was removed rather than shipped as a maybe |
+| **Version milestones** (a v1 to submit, a v2 to polish) | **Rejected.** I wanted one final product with a clean, structured history, and that is how the repository is built |
+| **Adding authentication** | **Rejected for scope.** The brief does not ask for it; a passcode option exists in configuration for anyone who needs the gate |
+| **Scheduled GPU hours and a scale-to-zero GPU tier** to conserve credit | **Declined for now.** O-HIVE is in the US, so I chose to keep the GPU warm around the clock during the review window. The design is written up above as the first thing I would build next |
+| **An Excel summary that read "Flagged for review: 0"** while the sheet showed amber cells | **Fixed on my report.** I noticed the contradiction in the export; the count now looks at each field rather than each row |
+
+> The pattern across all of these is the same: the assistant is fast and usually right, and the times it was wrong were caught by looking at real output — a fabricated phone number, a skipped field, a blank docs page, a summary row that contradicted its own sheet. The measurement and the looking were my job, and they are the reason the numbers in this README can be trusted.
 
 ## Licence
 
