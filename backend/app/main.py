@@ -71,15 +71,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
     app.add_middleware(SlowAPIMiddleware)
 
-    # The SPA is served same-origin by Caddy in production, so CORS is only
-    # needed for the Vite dev server on another port.
-    if not settings.is_production:
+    # CORS only when the SPA is served from another origin: a static host
+    # such as Vercel calling this API directly, or the Vite dev server. Added
+    # last so it is the outermost layer and answers preflights before rate
+    # limiting sees them. Explicit lists rather than wildcards: the browser
+    # sends one custom header, and no cookies, so nothing else needs to cross.
+    if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=[settings.app_base_url],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_origins=settings.cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "PATCH", "DELETE"],
+            allow_headers=["Content-Type", "X-Access-Code"],
+            max_age=600,
         )
 
     register_error_handlers(app)

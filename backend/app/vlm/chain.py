@@ -135,6 +135,11 @@ class ProviderChain:
     def tiers(self) -> list[str]:
         return [p.tier.value for p in self._providers]
 
+    @property
+    def models(self) -> dict[str, str]:
+        """Each tier's primary model. Public: the UI names what reads the cards."""
+        return {p.tier.value: p.model for p in self._providers}
+
     async def extract(self, image_data_url: str) -> VLMResult:
         """Return the first successful extraction, or raise AllProvidersFailedError."""
         attempts: dict[str, str] = {}

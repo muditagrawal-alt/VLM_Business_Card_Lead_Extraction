@@ -265,6 +265,11 @@ class TestHealth:
         body = (await client.get("/api/v1/ready")).json()
         assert body["database"] is True
         assert {t["tier"] for t in body["tiers"]} == {"gpu", "cpu"}
+        # The UI uses these to say truthfully which model reads the cards.
+        assert {t["tier"]: t["model"] for t in body["tiers"]} == {
+            "gpu": "stub-8b",
+            "cpu": "stub-4b",
+        }
 
 
 class TestDeletion:

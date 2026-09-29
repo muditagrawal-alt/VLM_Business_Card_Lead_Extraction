@@ -140,6 +140,7 @@ class TierHealth(BaseModel):
     tier: str
     healthy: bool
     breaker_state: str | None = None
+    model: str | None = None
 
 
 class HealthOut(BaseModel):

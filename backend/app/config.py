@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:5173"
     log_level: str = "INFO"
     app_access_code: str = ""
+    # Origins allowed to call the API from a browser, comma-separated. Empty
+    # when Caddy serves the SPA from the same origin; set to the static host's
+    # address (for example https://leads.vercel.app) when the SPA lives there.
+    app_cors_origins: str = ""
 
     # ---- Database ----
     database_url: PostgresDsn | str = "postgresql+asyncpg://leads:leads@localhost:5432/leads"
@@ -121,6 +125,14 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Allowed browser origins: the configured list, plus Vite in development."""
+        origins = [o.strip().rstrip("/") for o in self.app_cors_origins.split(",") if o.strip()]
+        if not self.is_production and self.app_base_url not in origins:
+            origins.append(self.app_base_url)
+        return origins
 
     def provider_chain(self) -> list[tuple[str, ProviderSettings]]:
         """Inference tiers in fallback order: GPU -> CPU -> hosted."""

@@ -132,6 +132,7 @@ class _StubChain:
     """Stands in for the provider chain in HTTP-level tests."""
 
     tiers: ClassVar[list[str]] = ["gpu", "cpu"]
+    models: ClassVar[dict[str, str]] = {"gpu": "stub-8b", "cpu": "stub-4b"}
 
     async def health(self) -> dict[str, bool]:
         return {"gpu": True, "cpu": True}

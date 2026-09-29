@@ -39,8 +39,14 @@ async def ready(session: SessionDep, chain: ChainDep, response: Response) -> Hea
 
     tier_health = await chain.health()
     breakers = {snap["tier"]: snap["state"] for snap in chain.breaker_snapshot()}
+    models = chain.models
     tiers = [
-        TierHealth(tier=name, healthy=healthy, breaker_state=str(breakers.get(name, "unknown")))
+        TierHealth(
+            tier=name,
+            healthy=healthy,
+            breaker_state=str(breakers.get(name, "unknown")),
+            model=models.get(name),
+        )
         for name, healthy in tier_health.items()
     ]
 
