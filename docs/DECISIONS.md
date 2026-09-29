@@ -167,7 +167,7 @@ the better engineering.
 
 ---
 
-## 9. One VM, two compose profiles
+## 9. One VM, compose profiles for each hardware shape
 
 **Chosen:** a single instance running Docker Compose, with `gpu` and `cpu`
 profiles over one compose file.
@@ -222,3 +222,59 @@ driver and container toolkit". Azure's stock Ubuntu image lacks those two
 things, so `deploy/azure/bootstrap-gpu.sh` installs them and hands over to the
 EC2 script. That is the entire Azure-specific surface, and the AWS GPU
 deployment is one command away when its quota lands.
+
+---
+
+## 12. Guardrails for a public URL with no accounts
+
+**Chosen:** capability URLs for reading, a shared access code for anything that
+spends or destroys, per-address limits, and a daily ceiling on the hosted key.
+
+The brief asks for a public URL and does not ask for authentication, and a
+login screen in front of a take-home review is friction for the one person it
+is meant for. But "no accounts" has a consequence that is easy to miss: every
+endpoint is reachable by anyone who has the link. Auditing for that found an
+endpoint that listed every visitor's batches — which, followed by the leads
+endpoint, was everyone's contacts to anyone. It was removed; the browser
+already kept its own history. A batch id is now a capability, the same model
+as an unlisted document link.
+
+The access code is optional and gates only upload, retry and delete. It
+travels in the link, so a reviewer clicks once and never sees a prompt, and it
+is compared in constant time. Per-address limits bound one caller; they cannot
+bound many, so the hosted tier also has a daily ceiling, kept in PostgreSQL so
+that every worker shares it and a restart does not reset it. Health probes are
+cached because `/ready` is public and would otherwise call the provider on the
+key with every hit.
+
+Rejected: accounts (out of scope, and friction for the reviewer), and an
+in-memory quota counter (per process, and reset by any restart — including
+one an abuser could provoke).
+
+---
+
+## 13. Gemini's free tier as the hosted model
+
+**Chosen:** any OpenAI-compatible endpoint for tier 3, configured for Google's
+Gemini free tier, with retries and a fallback model.
+
+The T4 cost about $14 a day, and the goal became a deployment that costs
+nothing. No provider offers a free always-on GPU, so the realistic options
+were a hosted model API. Alibaba Model Studio was already wired in, but its
+free quota is one million tokens per model for ninety days. Gemini's free tier
+needs no card and does not expire, and its OpenAI-compatible endpoint accepts
+the same request the client already sends — images as data URLs, and the
+strict JSON schema — so the switch was configuration.
+
+It was measured before it was trusted: 100 % on the evaluation set, every card
+on the strict rung, matching the self-hosted 8B. It also failed in ways a local
+server does not. The first model tried had been retired for new accounts, and
+about one request in seven was shed. Hence retries that honour `Retry-After`,
+and a model list that fails over.
+
+The cost is privacy. On the free tier, Google may use submitted content to
+improve its products. That is acceptable for a demonstration on sample cards,
+and it is stated in the setup guide, the runbook and the README; for real
+contacts, the paid tier or the self-hosted tiers are the answer. The hosted
+tier remains switchable off entirely.
+
