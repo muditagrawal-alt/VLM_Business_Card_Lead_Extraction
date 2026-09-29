@@ -8,6 +8,8 @@ presented as though every card took the same path.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import TYPE_CHECKING
 
 from app.core.logging import get_logger
@@ -62,9 +64,20 @@ def budget_guard(budget: DailyBudget) -> Callable[[], Awaitable[None]]:
 class ProviderChain:
     """Tries each enabled tier in order until one returns a valid extraction."""
 
-    def __init__(self, providers: list[VLMProvider], breakers: dict[str, CircuitBreaker]) -> None:
+    def __init__(
+        self,
+        providers: list[VLMProvider],
+        breakers: dict[str, CircuitBreaker],
+        *,
+        health_ttl_s: float = 0.0,
+    ) -> None:
         self._providers = providers
         self._breakers = breakers
+        # /ready is public. Without a cache every hit would probe every tier,
+        # which for a hosted tier means a request to the provider on our key.
+        self._health_ttl_s = health_ttl_s
+        self._health_cache: tuple[float, dict[str, bool]] | None = None
+        self._health_lock = asyncio.Lock()
 
     @classmethod
     def from_settings(
@@ -116,7 +129,7 @@ class ProviderChain:
                 "no inference tier is enabled; set VLM_GPU_ENABLED, "
                 "VLM_CPU_ENABLED or VLM_CLOUD_ENABLED (with an API key)"
             )
-        return cls(providers, breakers)
+        return cls(providers, breakers, health_ttl_s=settings.provider_health_interval_s)
 
     @property
     def tiers(self) -> list[str]:
@@ -157,8 +170,18 @@ class ProviderChain:
         raise AllProvidersFailedError(attempts)
 
     async def health(self) -> dict[str, bool]:
-        """Per-tier readiness, used by the readiness probe and /stats."""
-        return {p.tier.value: await p.health() for p in self._providers}
+        """Per-tier readiness, used by the readiness probe and /stats.
+
+        Cached for ``health_ttl_s``; the lock makes a burst of probes share one
+        round of requests instead of each starting its own.
+        """
+        async with self._health_lock:
+            now = time.monotonic()
+            if self._health_cache and now - self._health_cache[0] < self._health_ttl_s:
+                return self._health_cache[1]
+            result = {p.tier.value: await p.health() for p in self._providers}
+            self._health_cache = (now, result)
+            return result
 
     def breaker_snapshot(self) -> list[dict[str, object]]:
         return [b.snapshot() for b in self._breakers.values()]

@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.models import Base
 from app.models.enums import OutputMode, ProviderTier
 from app.services.budget import DailyBudget
-from app.vlm.chain import budget_guard
+from app.vlm.chain import ProviderChain, budget_guard
+from app.vlm.circuit_breaker import CircuitBreaker
 from app.vlm.openai_compat import OpenAICompatProvider
 from app.vlm.provider import VLMError
 
@@ -241,3 +242,41 @@ class TestDailyBudget:
             await guard()
 
         assert exc_info.value.retryable is False
+
+
+class _CountingProvider:
+    tier = ProviderTier.CLOUD
+    model = "m"
+
+    def __init__(self) -> None:
+        self.probes = 0
+
+    async def health(self) -> bool:
+        self.probes += 1
+        return True
+
+
+class TestHealthCache:
+    """/ready is public; uncached, every hit would call the provider on our key."""
+
+    async def test_probes_are_cached_for_the_interval(self) -> None:
+        p = _CountingProvider()
+        chain = ProviderChain(
+            [p],  # type: ignore[list-item]
+            {"cloud": CircuitBreaker("cloud")},
+            health_ttl_s=60,
+        )
+
+        for _ in range(20):
+            assert await chain.health() == {"cloud": True}
+
+        assert p.probes == 1
+
+    async def test_a_zero_interval_probes_every_time(self) -> None:
+        p = _CountingProvider()
+        chain = ProviderChain([p], {"cloud": CircuitBreaker("cloud")})  # type: ignore[list-item]
+
+        await chain.health()
+        await chain.health()
+
+        assert p.probes == 2
