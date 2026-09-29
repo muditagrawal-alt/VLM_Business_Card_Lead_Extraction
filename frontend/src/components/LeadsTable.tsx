@@ -34,7 +34,7 @@ const TIER_ICON: Record<ProviderTier, typeof Cpu> = {
 const TIER_TITLE: Record<ProviderTier, string> = {
   gpu: 'Read by the self-hosted model on GPU',
   cpu: 'Read by the self-hosted fallback model on CPU',
-  cloud: 'Read by the hosted Qwen API — this card left our server',
+  cloud: 'Read by a hosted model — this card left our server',
 };
 
 export function TierBadge({ task }: { task: Task | undefined }) {

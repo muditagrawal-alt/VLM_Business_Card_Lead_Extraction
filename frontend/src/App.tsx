@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useInference } from '@/hooks/useInference';
 import { useRoute } from '@/hooks/useRoute';
 import { JobPage } from '@/pages/JobPage';
 import { UploadPage } from '@/pages/UploadPage';
@@ -7,6 +8,7 @@ import { NORMAL } from '@/lib/motion';
 
 export default function App() {
   const { jobId, go } = useRoute();
+  const inference = useInference();
 
   return (
     <div className="flex min-h-full flex-col">
@@ -73,7 +75,7 @@ export default function App() {
 
       <footer className="border-t border-border px-4 py-4">
         <p className="mx-auto max-w-6xl text-xs text-muted-foreground">
-          Cards are read by a self-hosted Qwen3-VL model and deleted after seven days.
+          Cards are read by {inference.reader} and deleted from this service after seven days.
         </p>
       </footer>
     </div>

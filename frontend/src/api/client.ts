@@ -1,5 +1,5 @@
 import { getAccessCode } from '@/lib/accessCode';
-import type { Job, JobCreated, Lead, LeadUpdate, Task } from '@/types/api';
+import type { Job, JobCreated, Lead, LeadUpdate, Readiness, Task } from '@/types/api';
 
 /**
  * Where the API lives. Empty means the same origin, as when Caddy serves the
@@ -67,6 +67,16 @@ export const api = {
       body: form,
       signal: signal ?? null,
     });
+  },
+
+  /**
+   * Which tiers serve this deployment, and with which models. Read directly
+   * rather than through request(): a 503 while a tier warms up still carries
+   * the tiers, and the page only needs them to describe itself.
+   */
+  async readiness(): Promise<Readiness> {
+    const response = await fetch(`${BASE}/ready`);
+    return (await response.json()) as Readiness;
   },
 
   getJob(jobId: string): Promise<Job> {

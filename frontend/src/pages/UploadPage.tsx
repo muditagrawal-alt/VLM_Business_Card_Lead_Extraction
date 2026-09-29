@@ -1,21 +1,20 @@
 import { useMutation } from '@tanstack/react-query';
 import { motion } from 'motion/react';
-import { AlertCircle, ArrowRight, Clock, Cpu, ShieldCheck, Table2 } from 'lucide-react';
+import { AlertCircle, ArrowRight, Clock, Cloud, Cpu, Info, ShieldCheck, Table2 } from 'lucide-react';
 import { api, ApiError, isAccessCodeError } from '@/api/client';
 import { AccessCodePrompt } from '@/components/AccessCodePrompt';
 import { UploadZone } from '@/components/UploadZone';
 import { useHistory } from '@/hooks/useHistory';
+import { useInference } from '@/hooks/useInference';
 import { getAccessCode, setAccessCode } from '@/lib/accessCode';
 import { riseIn, staggerAt } from '@/lib/motion';
 import type { JobCreated } from '@/types/api';
 
-/** The three claims worth making, each verifiable in the product itself. */
-const CAPABILITIES = [
-  {
-    icon: Cpu,
-    title: 'Self-Hosted Vision Model',
-    body: 'Qwen3-VL reads each card directly. No separate OCR stage, and no card leaves the server unless the hosted fallback is enabled.',
-  },
+/**
+ * The claims worth making, each verifiable in the product itself. The first
+ * depends on the deployment, so it is described from the readiness report.
+ */
+const FIXED_CAPABILITIES = [
   {
     icon: ShieldCheck,
     title: 'Never Invents a Value',
@@ -30,6 +29,11 @@ const CAPABILITIES = [
 
 export function UploadPage({ onCreated }: { onCreated: (jobId: string) => void }) {
   const { entries, remember } = useHistory();
+  const inference = useInference();
+  const capabilities = [
+    { icon: inference.hosted ? Cloud : Cpu, title: inference.title, body: inference.body },
+    ...FIXED_CAPABILITIES,
+  ];
 
   const upload = useMutation({
     mutationFn: (files: File[]) => api.createJob(files),
@@ -49,7 +53,7 @@ export function UploadPage({ onCreated }: { onCreated: (jobId: string) => void }
           Capture Anywhere, Extract Instantly.
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          Upload a batch of business cards. A self-hosted vision-language model reads
+          Upload a batch of business cards. A vision-language model reads
           each one and returns a structured lead you can review, correct and export —
           without a person retyping a single field.
         </p>
@@ -57,6 +61,12 @@ export function UploadPage({ onCreated }: { onCreated: (jobId: string) => void }
 
       <motion.div variants={riseIn} initial="hidden" animate="visible">
         <UploadZone onSubmit={(files) => upload.mutate(files)} busy={upload.isPending} />
+        {inference.disclosure ? (
+          <p className="mt-2.5 flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            {inference.disclosure}
+          </p>
+        ) : null}
       </motion.div>
 
       {upload.error && isAccessCodeError(upload.error) ? (
@@ -127,9 +137,9 @@ export function UploadPage({ onCreated }: { onCreated: (jobId: string) => void }
 
       <section aria-label="How it works" className="border-t border-border pt-8">
         <ul className="grid gap-6 sm:grid-cols-3">
-          {CAPABILITIES.map((item, index) => (
+          {capabilities.map((item, index) => (
             <motion.li
-              key={item.title}
+              key={index}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={staggerAt(index, 0.06, 0.2)}

@@ -11,6 +11,20 @@ export type TaskStatus = 'queued' | 'processing' | 'done' | 'failed';
 export type ProviderTier = 'gpu' | 'cpu' | 'cloud';
 export type OutputMode = 'json_schema' | 'json_object' | 'prompt_only' | 'repaired';
 
+export interface TierHealth {
+  tier: ProviderTier;
+  healthy: boolean;
+  breaker_state: string | null;
+  /** The tier's primary model, e.g. "gemini-3.6-flash". */
+  model: string | null;
+}
+
+export interface Readiness {
+  status: string;
+  database: boolean | null;
+  tiers: TierHealth[];
+}
+
 /** The seven fields the assignment requires, in display order. */
 export const LEAD_FIELDS = [
   'first_name',
