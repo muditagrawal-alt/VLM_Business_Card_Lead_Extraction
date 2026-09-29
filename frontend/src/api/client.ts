@@ -1,3 +1,4 @@
+import { getAccessCode } from '@/lib/accessCode';
 import type { Job, JobCreated, Lead, LeadUpdate, Task } from '@/types/api';
 
 const BASE = '/api/v1';
@@ -15,7 +16,14 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, init);
+  // The deployment may require a shared passcode for anything that spends
+  // inference or deletes data; sending it on every request is simpler than
+  // tracking which routes are gated, and the server ignores it elsewhere.
+  const headers = new Headers(init?.headers);
+  const code = getAccessCode();
+  if (code) headers.set('X-Access-Code', code);
+
+  const response = await fetch(`${BASE}${path}`, { ...init, headers });
 
   if (!response.ok) {
     // The backend returns {error, details?}; fall back to the status text for
@@ -34,6 +42,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+/** The deployment asked for its access code, or refused the one it was sent. */
+export function isAccessCodeError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
 }
 
 export const api = {

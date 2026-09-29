@@ -1,9 +1,11 @@
 import { useMutation } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { AlertCircle, ArrowRight, Clock, Cpu, ShieldCheck, Table2 } from 'lucide-react';
-import { api, ApiError } from '@/api/client';
+import { api, ApiError, isAccessCodeError } from '@/api/client';
+import { AccessCodePrompt } from '@/components/AccessCodePrompt';
 import { UploadZone } from '@/components/UploadZone';
 import { useHistory } from '@/hooks/useHistory';
+import { getAccessCode, setAccessCode } from '@/lib/accessCode';
 import { riseIn, staggerAt } from '@/lib/motion';
 import type { JobCreated } from '@/types/api';
 
@@ -57,7 +59,17 @@ export function UploadPage({ onCreated }: { onCreated: (jobId: string) => void }
         <UploadZone onSubmit={(files) => upload.mutate(files)} busy={upload.isPending} />
       </motion.div>
 
-      {upload.error ? <div
+      {upload.error && isAccessCodeError(upload.error) ? (
+        <AccessCodePrompt
+          rejected={getAccessCode() !== null}
+          busy={upload.isPending}
+          onSubmit={(code) => {
+            setAccessCode(code);
+            // The mutation still holds the cards that were refused.
+            if (upload.variables) upload.mutate(upload.variables);
+          }}
+        />
+      ) : upload.error ? <div
           role="alert"
           aria-live="polite"
           className="flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/5 p-3.5 text-sm text-destructive"
