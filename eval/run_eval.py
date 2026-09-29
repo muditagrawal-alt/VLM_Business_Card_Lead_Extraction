@@ -42,6 +42,7 @@ from PIL import Image, ImageOps
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
+from app.config import get_settings  # noqa: E402
 from app.models.enums import ProviderTier  # noqa: E402
 from app.services.normalisation import (  # noqa: E402
     normalise,
@@ -219,7 +220,16 @@ async def main() -> None:
     ap.add_argument("--tier", choices=[t.value for t in ProviderTier], default="cpu")
     ap.add_argument("--base-url", default="http://127.0.0.1:8081/v1")
     ap.add_argument("--model", default="Qwen3VL-4B-Instruct-Q4_K_M")
+    # Deliberately no default on the command line: a key passed as an argument
+    # is visible in the process list and shell history. Omit it and the
+    # hosted tier's key is read from the environment / .env like the app does.
     ap.add_argument("--api-key", default="")
+    ap.add_argument(
+        "--retries",
+        type=int,
+        default=None,
+        help="retries on 429/5xx; defaults to the app's setting for the hosted tier, 0 otherwise",
+    )
     ap.add_argument("--max-edge", type=int, default=768)
     ap.add_argument("--timeout", type=float, default=300.0)
     ap.add_argument("--cards", type=Path, default=REPO_ROOT / "eval/cards/synthetic")
@@ -231,12 +241,22 @@ async def main() -> None:
     truth_path = args.truth or args.cards.parent / "ground_truth_synthetic.json"
     truth: dict[str, Any] = json.loads(truth_path.read_text())
 
+    tier = ProviderTier(args.tier)
+    settings = get_settings()
+    hosted = tier is ProviderTier.CLOUD
+    retries = (
+        args.retries
+        if args.retries is not None
+        else (settings.vlm_cloud_max_retries if hosted else 0)
+    )
     provider = OpenAICompatProvider(
-        tier=ProviderTier(args.tier),
+        tier=tier,
         base_url=args.base_url,
         model=args.model,
-        api_key=args.api_key,
+        api_key=args.api_key or (settings.vlm_cloud_api_key if hosted else ""),
         timeout_s=args.timeout,
+        supports_json_schema=settings.vlm_cloud_json_schema if hosted else True,
+        max_retries=retries,
     )
     if not await provider.health():
         print(f"provider at {args.base_url} is not responding", file=sys.stderr)
