@@ -6,7 +6,7 @@
 
 Upload cards in bulk · extract seven structured fields per card · review and correct in the browser · export a formatted Excel workbook.
 
-**[Open the live app →](https://muditagrawal-20-80-103-145.sslip.io)**
+**[Live deployment status →](#live-deployment)**
 
 [Setup guide](docs/SETUP.md) · [Architecture](docs/ARCHITECTURE.md) · [Design decisions](docs/DECISIONS.md) · [Evaluation](docs/EVALUATION.md) · [Runbook](docs/RUNBOOK.md)
 
@@ -16,13 +16,13 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 ![Eight business cards uploaded, extracted on the GPU tier in forty-one seconds, reviewed in the detail drawer, and exported to Excel](docs/images/walkthrough.gif)
 
-<div align="center"><sub>Eight cards, uploaded to the live deployment and extracted on the GPU tier in real time. No cuts.</sub></div>
+<div align="center"><sub>Eight cards, uploaded to the GPU deployment and extracted on the T4 in real time. No cuts.</sub></div>
 
 ### Watch the demo
 
 [![Narrated demo: upload, extraction on the T4, review and correction, and export](docs/media/demo-poster.png)](docs/media/demo.mp4)
 
-<div align="center"><sub>▶ Under ninety seconds, subtitled, recorded against the live deployment; the batch is shown at 4× speed, marked on screen. Music: "Inspired" by Kevin MacLeod (incompetech.com), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</sub></div>
+<div align="center"><sub>▶ Under ninety seconds, subtitled, recorded on the GPU deployment; the batch is shown at 4× speed, marked on screen. Music: "Inspired" by Kevin MacLeod (incompetech.com), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</sub></div>
 
 ---
 
@@ -30,7 +30,7 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 | Asked for | Where it is |
 |---|---|
-| Publicly accessible deployed application | <https://muditagrawal-20-80-103-145.sslip.io> — see [Live deployment](#live-deployment) |
+| Publicly accessible deployed application | See [Live deployment](#live-deployment): the GPU deployment is recorded in the [demo video](docs/media/demo.mp4), and its free replacement is linked there |
 | Source code | This repository: <https://github.com/muditagrawal-alt/VLM_Business_Card_Lead_Extraction> |
 | Setup and deployment instructions | [Quick start](#quick-start) and [Deployment](#deployment) here; the full walkthrough for both clouds in [docs/SETUP.md](docs/SETUP.md) |
 | Architecture and major technical decisions | [How it works](#how-it-works), then [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md) |
@@ -53,6 +53,7 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 - [Project structure](#project-structure)
 - [Libraries, frameworks, models and external components](#libraries-frameworks-models-and-external-components)
 - [Known limitations and what I would improve with more time](#known-limitations-and-what-i-would-improve-with-more-time)
+- [Guardrails on the public URL](#guardrails-on-the-public-url)
 - [Privacy and data handling](#privacy-and-data-handling)
 - [AI Usage](#ai-usage)
 
@@ -60,12 +61,13 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 ## Live deployment
 
-| | |
+> **Status, 29 September 2026.** The GPU deployment below ran from 18 to 25 September and has been shut down to stop spending cloud credit. The demo video, the screenshots and every live figure in this README were recorded on it. Its replacement costs nothing to run: no model server, every card read by Gemini's free tier through the [`hosted` profile](docs/SETUP.md#6-without-a-gpu-the-hosted-tier), which scored **100 %** on the evaluation set. Its link will be published here when it is up.
+
+| | The GPU deployment, 18–25 September |
 |---|---|
-| **URL** | <https://muditagrawal-20-80-103-145.sslip.io> — TLS by Let's Encrypt, no login |
-| **Runs on** | One `Standard_NC4as_T4_v3` VM on Azure (Central US): 4 vCPU, 28 GB, one NVIDIA T4 16 GB |
-| **Serving** | Qwen3-VL-8B-Instruct Q8_0 on the GPU as tier 1; Qwen3-VL-4B Q4_K_M on the CPU as tier 2 |
-| **Measured** | A warm server clears an 8-card batch in **41 seconds** — about 9 s per card, two in flight — and scored **100 %** on the evaluation set from the public URL |
+| **Ran on** | One `Standard_NC4as_T4_v3` VM on Azure (Central US): 4 vCPU, 28 GB, one NVIDIA T4 16 GB, TLS by Let's Encrypt |
+| **Served** | Qwen3-VL-8B-Instruct Q8_0 on the GPU as tier 1; Qwen3-VL-4B Q4_K_M on the CPU as tier 2 |
+| **Measured** | A warm server cleared an 8-card batch in **41 seconds** — about 9 s per card, two in flight — and scored **100 %** on the evaluation set through the public URL |
 
 **Why Azure, when the brief said AWS.** The stack was built for AWS and first went live there on an `m7i-flex.large` (the free-tier-equivalent, CPU profile), where a card takes about 113 s. AWS then declined the G-instance vCPU quota for a new account — the standard answer, appealed and escalated to the EC2 service team, still pending at the time of writing. Azure approved a T4 in fifteen minutes. The Compose file, the images and the bootstrap logic are the same on both clouds; the only Azure-specific code is an 85-line script that installs the NVIDIA driver and container toolkit the AWS image ships pre-installed. Both paths are documented in the [setup guide](docs/SETUP.md), and the AWS deployment comes back with one command when the quota lands.
 
@@ -103,7 +105,7 @@ flowchart TB
             T2["Tier 2 · Qwen3-VL-4B Q4_K_M<br/>llama.cpp on CPU"]
         end
     end
-    T3["Tier 3 · qwen3-vl-plus<br/>Alibaba Model Studio"]
+    T3["Tier 3 · hosted, OpenAI-compatible<br/>Gemini free tier or Model Studio"]
 
     UI -- HTTPS --> Caddy --> API
     API -- "validate · dedupe · strip EXIF · downscale" --> PG
@@ -120,13 +122,13 @@ A card is never sent to a single point of failure. Each one runs through an orde
 |---|---|---|---|
 | 1 | Qwen3-VL-8B-Instruct (Q8_0) | Self-hosted, NVIDIA T4 | **9–12 s** warm; 34 s for the first card after a restart |
 | 2 | Qwen3-VL-4B-Instruct (Q4_K_M) | Self-hosted, CPU | 113 s median on 2 vCPUs; ~20 s on Apple Silicon |
-| 3 | Qwen3-VL (hosted Qwen API) | Alibaba Model Studio | ~3–6 s |
+| 3 | Gemini 3.6 Flash, or qwen3-vl-plus | Hosted, any OpenAI-compatible API | 16.6 s p50 on Gemini's free tier, mostly backoff after shed requests |
 
-If a tier fails or times out, the next takes over. After three consecutive failures its breaker opens and it is skipped until a probe succeeds — without that, a dead GPU container would cost every card in a 50-card batch a full timeout before falling through. The queue is PostgreSQL itself (`SELECT … FOR UPDATE SKIP LOCKED` with leases), so a worker that dies mid-card loses nothing and there is no broker to operate. The full diagrams — request flow, per-card processing, data model — are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+If a tier fails or times out, the next takes over. A hosted tier first retries a 429 or 5xx, honouring `Retry-After`, and fails over across a list of models, because free tiers shed load and retire models. After three consecutive failures its breaker opens and it is skipped until a probe succeeds — without that, a dead GPU container would cost every card in a 50-card batch a full timeout before falling through. The queue is PostgreSQL itself (`SELECT … FOR UPDATE SKIP LOCKED` with leases), so a worker that dies mid-card loses nothing and there is no broker to operate. The full diagrams — request flow, per-card processing, data model — are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Structured output
 
-On the self-hosted tiers the JSON schema is compiled into a grammar, so the model **cannot** emit malformed JSON or unknown fields. Hosted providers vary, so the client degrades through `json_schema` → `json_object` → mining the first JSON object out of the text, with one repair attempt that feeds the validation error back. The rung that succeeded is stored per card, which keeps accuracy comparisons between tiers honest.
+On the self-hosted tiers the JSON schema is compiled into a grammar, so the model **cannot** emit malformed JSON or unknown fields. Gemini accepts the same strict schema and answered every evaluation card on it. Hosted providers vary, so for one that does not, the client degrades through `json_schema` → `json_object` → mining the first JSON object out of the text, with one repair attempt that feeds the validation error back. The rung that succeeded is stored per card, which keeps accuracy comparisons between tiers honest.
 
 Every field is **required but nullable**: the model must answer for each one, and an explicit `null` is a valid answer. That distinction is what took field accuracy from 82.1 % to 100 % on the evaluation set — an *optional* field in a grammar is one the model may silently skip, and it did.
 
@@ -140,12 +142,13 @@ Every figure here comes from `eval/run_eval.py` or from the deployed service, no
 
 | Model | Where | Image | Field accuracy | Perfect cards | Latency/card |
 |---|---|---|---|---|---|
-| Qwen3-VL-8B Q8_0 | **Live, T4 GPU** | 768 px | **100.0 %** | 8 / 8 | 8.7–12.1 s (8.9 s median) |
+| Qwen3-VL-8B Q8_0 | **T4 GPU deployment** | 768 px | **100.0 %** | 8 / 8 | 8.7–12.1 s (8.9 s median) |
+| Gemini 3.6 Flash | **Hosted, free tier** | 768 px | **100.0 %** | 8 / 8 | 16.6 s p50, mostly free-tier backoff |
 | Qwen3-VL-8B Q8_0 | Apple Silicon, Metal | 768 px | **100.0 %** | 8 / 8 | 64.4 s p50 |
 | Qwen3-VL-4B Q4_K_M | Apple Silicon, Metal | 768 px | **100.0 %** | 8 / 8 | 20.6 s p50 |
 | Qwen3-VL-4B Q4_K_M | AWS `m7i-flex.large`, 2 vCPU | 768 px | — | 7 / 8 completed | 113 s median; one card hit the 600 s ceiling |
 
-Beyond the synthetic set, two batches of **real** cards were run through the live deployment and graded by hand against the images (the cards themselves are not published — they belong to real people):
+Beyond the synthetic set, two batches of **real** cards were run through the GPU deployment and graded by hand against the images (the cards themselves are not published — they belong to real people):
 
 | Set | Cards | Fields correct | Perfect cards | Notes |
 |---|---|---|---|---|
@@ -154,7 +157,7 @@ Beyond the synthetic set, two batches of **real** cards were run through the liv
 
 The card set is eight synthetic cards built around the layouts that break extraction: a dark centred card, one with no job title, a first name given only as an initial, an honorific and suffix, two people on one card, a slogan where a company name usually sits, and a card listing mobile, office and fax.
 
-> **This is not a production accuracy claim.** Those cards are clean renders with perfect focus and no glare, skew or creases. They isolate reasoning and schema failures — which is what they were built for, and they caught a real one — but they do not test perception. Both models now score full marks, so the set can no longer distinguish them; harder input is the next evaluation priority. See [docs/EVALUATION.md](docs/EVALUATION.md) for what remains unmeasured.
+> **This is not a production accuracy claim.** Those cards are clean renders with perfect focus and no glare, skew or creases. They isolate reasoning and schema failures — which is what they were built for, and they caught a real one — but they do not test perception. Every model now scores full marks, so the set can no longer distinguish them; harder input is the next evaluation priority. See [docs/EVALUATION.md](docs/EVALUATION.md) for what remains unmeasured.
 
 ## Screenshots
 
@@ -205,46 +208,51 @@ Production is unaffected: Compose addresses the model servers by container name 
 
 ## Configuration
 
-Every setting is an environment variable with a safe default, so one image runs unchanged across local, GPU and CPU-profile deployments. Copy `.env.example` and edit. The full set is documented there; the ones that matter most:
+Every setting is an environment variable with a safe default, so one image runs unchanged across local, GPU, CPU and hosted deployments. Copy `.env.example` and edit. The full set is documented there; the ones that matter most:
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | — | PostgreSQL DSN. A sync `postgresql://` scheme is rewritten to `postgresql+asyncpg://` rather than silently blocking the event loop. |
 | `VLM_GPU_ENABLED` | `true` | Tier 1. Disable on a CPU-only host so the chain does not spend a timeout on an absent server. |
 | `VLM_CLOUD_API_KEY` | — | Tier 3. **A cloud tier with no key is treated as disabled**, so a missing secret degrades to the self-hosted tiers instead of failing every card. |
+| `VLM_CLOUD_MODEL` | `qwen3-vl-plus` | A comma-separated list, tried in order when a model is retired or busy. |
+| `VLM_CLOUD_DAILY_REQUEST_LIMIT` | `1000` | Hosted requests per UTC day across all workers, so the public URL cannot drain the key. |
 | `IMAGE_MAX_EDGE_PX` | `768` | Long-edge cap on images sent to the model. The dominant latency lever. |
 | `MAX_FILES_PER_JOB` | `50` | Batch ceiling. Exceeding it returns 413 naming the limit. |
 | `WORKER_CONCURRENCY` | `2` | Cards in flight. Set to 1 on CPU — llama.cpp on two vCPUs gains nothing from parallel requests. |
 | `RETENTION_DAYS` | `7` | After this, batches, leads and images are deleted. |
-| `APP_ACCESS_CODE` | *(empty)* | Optional passcode gating the endpoints that cost inference time. |
+| `RATE_LIMIT_IMAGES_PER_HOUR` | `100` | Cards per client address per hour. |
+| `APP_ACCESS_CODE` | *(empty)* | Optional passcode for uploading, retrying and deleting; it can travel in the link as `/?code=…`. |
 
 ## API
 
-Interactive documentation at [`/api/docs`](https://muditagrawal-20-80-103-145.sslip.io/api/docs). All routes are under `/api/v1`.
+Interactive documentation at `/api/docs` on any deployment. All routes are under `/api/v1`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/jobs` | Upload 1–50 images. Returns accepted, duplicate and rejected counts. |
+| `POST` | `/jobs` | Upload 1–50 images. Returns accepted, duplicate and rejected counts. † |
 | `GET` | `/jobs/{id}` | Batch progress, per-card state, and a completion estimate. |
 | `GET` | `/jobs/{id}/leads` | Extracted leads. |
 | `PATCH` | `/leads/{id}` | Correct a lead. Only fields sent are changed. |
 | `GET` | `/jobs/{id}/export.xlsx` · `.csv` | Download the batch. |
-| `POST` | `/jobs/{id}/tasks/{id}/retry` | Requeue a failed card. |
+| `POST` | `/jobs/{id}/tasks/{id}/retry` | Requeue a failed card. † |
 | `GET` | `/images/{id}` · `/thumb` | Card image and thumbnail. |
 | `GET` | `/health` · `/ready` · `/stats` | Liveness, readiness, per-tier throughput. |
-| `DELETE` | `/jobs/{id}` | Purge a batch immediately. |
+| `DELETE` | `/jobs/{id}` | Purge a batch immediately. † |
+
+† Requires the `X-Access-Code` header when `APP_ACCESS_CODE` is set. There is deliberately no route that lists batches: without accounts it would hand every visitor's leads to anyone.
 
 An invalid file is reported individually rather than failing the batch — twenty cards and one screenshot yields nineteen leads and one clear message.
 
 ```bash
-curl -X POST https://muditagrawal-20-80-103-145.sslip.io/api/v1/jobs \
+curl -X POST https://<host>/api/v1/jobs -H "X-Access-Code: <code>" \
   -F "files=@card-one.jpg" -F "files=@card-two.jpg"
 ```
 
 ## Testing
 
 ```bash
-make test           # 192 backend, 7 frontend
+make test           # 220 backend, 12 frontend
 make lint           # ruff, pyright, eslint, tsc
 make eval           # field accuracy against the known-answer card set
 ```
@@ -255,20 +263,22 @@ CI runs both suites, builds both container images, and applies every migration f
 
 ## Deployment
 
-One VM running Docker Compose behind Caddy, which terminates TLS and serves the built SPA. Two profiles over one Compose file:
+One VM running Docker Compose behind Caddy, which terminates TLS and serves the built SPA. Three profiles over one Compose file:
 
 ```bash
 docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile gpu up -d --build
 docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile cpu up -d --build
+docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile hosted up -d --build
 ```
 
-The `cpu` profile is the same stack without the GPU container. The API and worker images are identical between them, so switching is configuration rather than a second deployment.
+The `cpu` profile is the same stack without the GPU container; `hosted` runs no model server at all and sends every card to the hosted tier, so it fits a machine with about a gigabyte of memory. The API and worker images are identical across all three, so switching is configuration rather than a second deployment.
 
 | Cloud | Instance | Bootstrap | Notes |
 |---|---|---|---|
 | AWS | `g4dn.xlarge` (T4) | `deploy/ec2/user-data-gpu.sh` | Deep Learning Base AMI: driver and container toolkit pre-installed |
 | AWS | `m7i-flex.large` (CPU) | `deploy/ec2/user-data-cpu.sh` | The free-tier-equivalent; 4B model only |
 | Azure | `Standard_NC4as_T4_v3` (T4) | `deploy/azure/bootstrap-gpu.sh` | Installs the driver and toolkit, then runs the EC2 script unchanged |
+| Any | ~1 GB, no GPU | `make deploy-hosted` | Hosted profile: no weights to download, every card to the hosted tier |
 
 Every bootstrap verifies the GPU is visible *from inside a container*, downloads weights with retries, and waits for `/api/v1/ready` rather than reporting success when containers start. No domain is needed: [sslip.io](https://sslip.io) resolves the IP-encoded host name and Caddy obtains a real certificate for it.
 
@@ -303,7 +313,8 @@ scripts/          Model download
 |---|---|---|---|
 | **Qwen3-VL-8B-Instruct** | GGUF, Q8_0 (8.3 GB) + F16 vision projector (1.1 GB) | Tier 1, llama.cpp on the T4 | [`Qwen/Qwen3-VL-8B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF), Apache-2.0 |
 | **Qwen3-VL-4B-Instruct** | GGUF, Q4_K_M (2.4 GB) + F16 projector (0.8 GB) | Tier 2, llama.cpp on CPU | [`Qwen/Qwen3-VL-4B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF), Apache-2.0 |
-| qwen3-vl-plus | hosted | Tier 3, optional, off unless a key is set | Alibaba Model Studio, OpenAI-compatible endpoint |
+| Gemini 3.6 Flash, falling back to 3.1 Flash-Lite | hosted | Tier 3 on the free deployment | Google AI Studio, OpenAI-compatible endpoint |
+| qwen3-vl-plus | hosted | Tier 3, alternative provider | Alibaba Model Studio, OpenAI-compatible endpoint |
 
 No other model, OCR engine or embedding is used. The VLM is the OCR. Weights are downloaded by `scripts/download_models.sh` with resume and GGUF magic-byte verification; they are never committed.
 
@@ -350,11 +361,12 @@ pytest · pytest-asyncio · respx · aiosqlite · ruff · pyright · Vitest · T
 
 | Service | Used for |
 |---|---|
-| Azure `Standard_NC4as_T4_v3`, Central US | The live GPU deployment (quota via support ticket, approved in ~15 min) |
+| Azure `Standard_NC4as_T4_v3`, Central US | The GPU deployment, 18–25 September (quota via support ticket, approved in ~15 min); shut down to stop spending credit |
 | AWS EC2 `m7i-flex.large`, us-east-1 | The first deployment, CPU profile; the GPU quota appeal is with the EC2 service team |
 | sslip.io · Let's Encrypt | A public host name and a real certificate without buying a domain |
 | Hugging Face Hub | Model weights, fetched at deploy time |
-| Alibaba Model Studio | Optional hosted tier 3 |
+| Google AI Studio (Gemini API) | The hosted tier on its free plan |
+| Alibaba Model Studio | Alternative hosted provider for tier 3 |
 | incompetech.com | Demo-video music, *"Inspired"* by Kevin MacLeod, CC BY 4.0 |
 
 ## Known limitations and what I would improve with more time
@@ -370,7 +382,9 @@ pytest · pytest-asyncio · respx · aiosqlite · ruff · pyright · Vitest · T
 | **PDFs are not accepted** | Images only; the error says so | Rasterise the first page with `pdfium` |
 | **The first card after a server restart takes ~34 s** | CUDA kernels compile and the projector runs cold | Send a warm-up request at boot before reporting ready |
 | **Single instance, local storage** | Enough for the assignment; the storage interface already allows an S3 backend | S3 for images, more than one worker, a managed PostgreSQL |
-| **No login** | Out of scope per the brief; a passcode is available via `APP_ACCESS_CODE` | Proper auth if it were shared beyond a review |
+| **The free hosted tier is slower and less predictable than the GPU** | About one request in seven is shed, and the backoff puts the median at 16.6 s against 8.9 s on the T4 | A paid tier, or the GPU again when the AWS quota lands |
+| **Gemini's free tier may use submitted cards** to improve Google's products | The provider's free-tier terms | The paid tier, or the self-hosted tiers, for real contacts |
+| **No login** | Out of scope per the brief; `APP_ACCESS_CODE` gates upload, retry and delete, and can travel in the link | Proper auth if it were shared beyond a review |
 
 ### What I would do first
 
@@ -378,15 +392,30 @@ pytest · pytest-asyncio · respx · aiosqlite · ruff · pyright · Vitest · T
 - **A scale-to-zero GPU tier.** The app on a small always-on VM, the T4 started when a batch arrives and deallocated after fifteen idle minutes. It is designed — the GPU is already just a URL to the worker — but it trades a three-minute cold start for a 95 % cost cut, and for a review window the warm GPU mattered more.
 - **Bring the GPU deployment back to AWS** when the quota appeal lands. It is one command; the AWS path is documented and tested.
 - **Region inference from the address**, so Indian cards stop showing amber on every mobile number.
-- **The hosted tier in production.** It is implemented and tested, but the live deployment runs without its key, so the third tier has never taken a card there.
+- **The hosted tier on the real cards.** Gemini matches the 8B on the synthetic set, but the web and wallet cards have only been graded on the self-hosted tier.
 
+
+## Guardrails on the public URL
+
+There are no accounts, so anything the URL exposes is exposed to whoever has the link. The layers that stop misuse of the deployment and of the hosted key:
+
+| Guardrail | What it stops |
+|---|---|
+| **No endpoint lists batches** | Reading other visitors' leads. A batch is reachable only by its id, an unguessable UUID the uploader's browser keeps. |
+| **Access code on upload, retry and delete** | Strangers spending inference or emptying the database. Optional, compared in constant time, shareable as `/?code=…`. |
+| **Per-address limits** | One caller flooding the queue: batches per ten minutes and cards per hour. |
+| **A daily ceiling on the hosted key** | Many callers draining the quota together. Shared by every worker in PostgreSQL, so a restart does not reset it. |
+| **Cached health probes** | Using the public readiness endpoint to call the provider on the key. |
+| **The key never leaves the server** | It is not sent to the browser or written to the logs. |
+
+Each one is covered by tests; [docs/SETUP.md](docs/SETUP.md#7-guardrails-for-a-public-url) has the settings.
 
 ## Privacy and data handling
 
 - Batches, leads and images are deleted after `RETENTION_DAYS` (7 by default), and a user can purge a batch immediately.
 - Uploads have **EXIF stripped on ingest**, so stored images carry no GPS trail — a phone photo of a card records where it was taken, and nothing downstream needs that.
 - Client IP addresses are stored **only as a salted hash**: enough to rate limit and audit, not enough to make the database personal data on its own.
-- With the hosted tier enabled, a card that both self-hosted tiers fail is sent to Alibaba Model Studio in Singapore. Rows processed that way are badged in the UI, and the tier can be switched off entirely.
+- With the hosted tier enabled, cards reach the configured provider: Google's Gemini API, or Alibaba Model Studio in Singapore. **On Gemini's free tier, Google may use submitted content to improve its products**, so the free deployment is for sample cards, not real contacts. Rows read by the hosted tier are badged in the UI, and the tier can be switched off entirely.
 - Card text is treated as data, never as instruction. Grammar-constrained output means text printed on a card cannot change the response shape.
 
 ## AI Usage
@@ -403,6 +432,7 @@ The working arrangement was that I owned the problem, the decisions and the acce
 - **I decided the shape of the system**: GPU primary, CPU fallback, hosted fallback, in that order; PostgreSQL rather than a broker; a single VM with two Compose profiles; no authentication for the assignment.
 - **I supplied the test material and the verdicts.** The real cards came from the web and from a wallet at home; I looked at what came back, said which extractions were wrong, and sent them back to be fixed one at a time. The evaluation set, the ground truth, and the rule that a number is *never* guessed all came out of those rounds.
 - **I ran the cloud accounts** — AWS, then GCP, then Azure — filed the quota requests and the appeal, and chose Azure when it was the one that said yes.
+- **I decided when to stop spending.** After the review window I shut the GPU down, asked for a way to keep the app running for nothing, and asked for guardrails so that nobody could misuse the key or the deployment.
 - The assistant did most of the implementation under that direction — code, tests, deployment scripts — ran the evaluation sweeps, drafted the docs, and did the debugging legwork when something broke.
 
 ### Recommendations adopted, after they earned it
@@ -414,6 +444,9 @@ The working arrangement was that I owned the problem, the decisions and the acce
 | **The queue lives in PostgreSQL** (`SKIP LOCKED` with leases) rather than Redis or Celery | One fewer service to operate, crash recovery for free, and the queue and the leads are in one transaction |
 | **Per-tier circuit breakers** | Without them a dead GPU container costs every card in a batch a full timeout before falling through |
 | **Required-but-nullable fields in the grammar** | This was a fix to the assistant's own first design — see below — and it took the evaluation from 82.1 % to 100 % |
+| **Removing the endpoint that listed every batch** | Found while auditing for the guardrails I asked for. With no accounts, it let anyone read everyone's leads; the frontend never used it, so it went |
+| **Gemini's free tier through the existing client** | I asked whether Gemini's free version would work. Before answering, the assistant checked Gemini's OpenAI-compatible endpoint against the request the client already sends; it was a configuration change, and it then scored 100 % |
+| **A daily ceiling on the hosted key, kept in the database** | Per-address limits cannot stop several addresses draining one quota, and an in-memory counter resets with the container |
 | **Self-hosting Swagger UI instead of loosening the Content-Security-Policy** | The demo recording showed the docs page blank in production. The assistant proposed vendoring the assets over relaxing the policy; that is the right instinct and it is what shipped |
 
 ### Recommendations rejected or modified
@@ -422,14 +455,16 @@ The working arrangement was that I owned the problem, the decisions and the acce
 |---|---|
 | **Optional fields in the output schema** (the first implementation) | **Modified after measurement.** The model silently skipped optional fields and scored 82.1 %. Making every field required, with `null` an explicit answer, took it to 100 %. The assistant designed the original; the evaluation caught it |
 | **Falling back to a US region when parsing a number with no country code** | **Rejected.** It produced a "valid" `+1 705 555 9999` for an Indian card — fabricated data with a confidence score. Replaced with region inference from sibling numbers, the email domain and the printed country, and *no* guess otherwise. A flagged number beats a wrong one |
-| **A projected T4 latency of "2–4 s per card"** in an early README draft | **Rejected as a claim.** Nothing that was not measured goes in the README. The measured figure on the live deployment is 9–12 s, and that is what it says |
+| **A projected T4 latency of "2–4 s per card"** in an early README draft | **Rejected as a claim.** Nothing that was not measured goes in the README. The measured figure on the GPU deployment was 9–12 s, and that is what it says |
 | **MLX on Apple Silicon** to cut local latency further | **Abandoned.** The downloads failed repeatedly on my network and the gain was unverified, so the script was removed rather than shipped as a maybe |
 | **Version milestones** (a v1 to submit, a v2 to polish) | **Rejected.** I wanted one final product with a clean, structured history, and that is how the repository is built |
 | **Adding authentication** | **Rejected for scope.** The brief does not ask for it; a passcode option exists in configuration for anyone who needs the gate |
-| **Scheduled GPU hours and a scale-to-zero GPU tier** to conserve credit | **Declined for now.** O-HIVE is in the US, so I chose to keep the GPU warm around the clock during the review window. The design is written up above as the first thing I would build next |
+| **Scheduled GPU hours and a scale-to-zero GPU tier** to conserve credit | **Declined.** O-HIVE is in the US, so I kept the GPU warm around the clock during the review window, then shut it down altogether. The scale-to-zero design is written up above |
+| **Alibaba Model Studio as the free hosted option** | **Modified on my requirement.** It was the first suggestion, but its free quota is one million tokens for ninety days; I wanted something completely free, which is how the hosted tier ended up on Gemini |
+| **`gemini-2.5-flash` as the hosted model** | **Replaced after it failed.** It returns 404 to new accounts. The tier now takes a list of models and fails over, so the next retirement is a log line rather than an outage |
 | **An Excel summary that read "Flagged for review: 0"** while the sheet showed amber cells | **Fixed on my report.** I noticed the contradiction in the export; the count now looks at each field rather than each row |
 
-> The pattern across all of these is the same: the assistant is fast and usually right, and the times it was wrong were caught by looking at real output — a fabricated phone number, a skipped field, a blank docs page, a summary row that contradicted its own sheet. The measurement and the looking were my job, and they are the reason the numbers in this README can be trusted.
+> The pattern across all of these is the same: the assistant is fast and usually right, and the times it was wrong were caught by looking at real output — a fabricated phone number, a skipped field, a blank docs page, a summary row that contradicted its own sheet, an endpoint that handed out everyone's leads. The measurement and the looking were my job, and they are the reason the numbers in this README can be trusted.
 
 ## Licence
 
