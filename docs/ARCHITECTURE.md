@@ -13,7 +13,7 @@ flowchart LR
   W --> F
   W -->|tier 1| G[llama-gpu<br/>Qwen3-VL-8B Q8_0]
   W -.->|tier 2| Cp[llama-cpu<br/>Qwen3-VL-4B Q4_K_M]
-  W -.->|tier 3| M[Alibaba Model Studio<br/>qwen3-vl-plus]
+  W -.->|tier 3| M[Hosted, OpenAI-compatible<br/>Gemini or Model Studio]
   B[backup] --> P
 
   subgraph instance["One VM (EC2 or Azure)"]
@@ -155,4 +155,7 @@ images are shared and left to the retention sweep.
 | Model output | Validated against the schema; phones and emails re-validated independently. |
 | User corrections | Normalised through the same code as extracted values. |
 | Client IP | Stored only as a salted hash. |
+| Batch ids | Unguessable UUIDs, and no endpoint lists them, so one visitor cannot find another's leads. |
+| Mutating endpoints | Upload, retry and delete require `APP_ACCESS_CODE` when it is set, compared in constant time. |
 | Hosted tier | Off-box. Disclosed per row in the UI and disableable entirely. |
+| Hosted key | Server-side only. A daily ceiling in PostgreSQL bounds what the public URL can spend, and health probes are cached so `/ready` cannot be used to call the provider. |

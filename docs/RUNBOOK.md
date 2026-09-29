@@ -103,8 +103,22 @@ with `ls -lh /opt/models` and re-run `scripts/download_models.sh`, which checks
 GGUF magic bytes rather than merely that a file exists.
 
 **Everything is ready but uploads return 429.** Rate limiting, working as
-intended. Raise `RATE_LIMIT_JOBS` in `.env` and restart the API, or set
-`APP_ACCESS_CODE` and share the code instead of loosening the limit.
+intended. There are two limits per client address: batches
+(`RATE_LIMIT_JOBS`) and cards per hour (`RATE_LIMIT_IMAGES_PER_HOUR`); the
+error names which. Raise the one that bit and restart the API, or set
+`APP_ACCESS_CODE` and share the code instead of loosening either.
+
+**Cards fail with `daily limit of N hosted requests reached`.** The shared
+ceiling on the hosted tier. It resets at 00:00 UTC, and the self-hosted tiers
+are unaffected. See how the day went before raising it:
+
+```bash
+$COMPOSE exec postgres psql -U leads -d leads -c \
+  "select * from usage_counters order by day desc limit 7;"
+```
+
+Keep `VLM_CLOUD_DAILY_REQUEST_LIMIT` below the provider's own daily cap, or
+the provider will start refusing first and every card will spend its retries.
 
 **Cards stay `queued` and nothing moves.** The worker is not claiming. Check it
 is running, then look for tasks stuck in `processing` with an expired lease —
@@ -209,6 +223,11 @@ aws events put-rule --name vlm-stop  --schedule-expression "cron(30 18 * * ? *)"
 - Uploads have EXIF stripped on ingest, so stored images carry no GPS trail.
 - Client IP addresses are stored only as a salted hash.
 - With `VLM_CLOUD_ENABLED=true`, a card that both self-hosted tiers fail is
-  sent to Alibaba Model Studio in Singapore. Rows processed that way carry a
-  badge in the UI saying the card left the server. Set it to `false` to keep
-  everything on-box.
+  sent to the configured hosted provider — Alibaba Model Studio in Singapore,
+  or Google's Gemini API. Rows processed that way carry a badge in the UI
+  saying the card left the server. Set it to `false` to keep everything
+  on-box.
+- On Gemini's free tier, Google may use submitted cards to improve its
+  products. Use the paid tier, or keep the hosted tier off, for real contacts.
+- There is no endpoint that lists batches. A batch is reachable only by its
+  id, which only the uploader's browser holds.

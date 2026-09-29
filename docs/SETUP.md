@@ -9,8 +9,10 @@ matter once it is live. Every command here has been run as written.
 - [3. Production: the Compose stack](#3-production-the-compose-stack)
 - [4. Deploy on AWS](#4-deploy-on-aws)
 - [5. Deploy on Azure](#5-deploy-on-azure)
-- [6. Configuration reference](#6-configuration-reference)
-- [7. Troubleshooting](#7-troubleshooting)
+- [6. Without a GPU: the hosted tier](#6-without-a-gpu-the-hosted-tier)
+- [7. Guardrails for a public URL](#7-guardrails-for-a-public-url)
+- [8. Configuration reference](#8-configuration-reference)
+- [9. Troubleshooting](#9-troubleshooting)
 
 ---
 
@@ -82,7 +84,7 @@ make llama-gpu                     # 127.0.0.1:18080, -ngl 99
 ### Verify
 
 ```bash
-make test                          # 192 backend + 7 frontend tests, no model needed
+make test                          # 220 backend + 12 frontend tests, no model needed
 make lint                          # ruff, ruff format, pyright, eslint, tsc
 make eval                          # field accuracy against eval/cards (needs llama-cpu)
 ```
@@ -229,7 +231,68 @@ refused in every region. After upgrading to Pay-As-You-Go, a *Service and
 subscription limits* support request for `Standard NCASv3_T4 Family vCPUs` → 4
 is free on every plan and was approved in about fifteen minutes.
 
-## 6. Configuration reference
+## 6. Without a GPU: the hosted tier
+
+Tier 3 is any OpenAI-compatible vision endpoint, and it can carry the whole
+load on its own. Two providers have been set up:
+
+| Provider | `VLM_CLOUD_BASE_URL` | `VLM_CLOUD_MODEL` | Free allowance | Measured |
+|---|---|---|---|---|
+| Google AI Studio (Gemini) | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-3.6-flash,gemini-3.1-flash-lite` | Free tier, no card, no expiry; per-model rate limits | 100 % on the evaluation set, 16.6 s p50 |
+| Alibaba Model Studio (Qwen) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `qwen3-vl-plus` | 1M tokens per model for 90 days, Singapore endpoint only | Not measured |
+
+A Gemini key comes from <https://aistudio.google.com/apikey>. Do not add
+billing to the project if you want to stay on the free tier. The key belongs in
+`.env` as `VLM_CLOUD_API_KEY` — never on a command line, where it lands in the
+process list and shell history. The model list is tried in order: free tiers
+retire models (`gemini-2.5-flash` returns 404 to new accounts) and shed load per
+model, so a second name keeps the tier answering.
+
+**The privacy trade-off.** On Gemini's free tier, Google may use prompts and
+responses to improve its products, and human reviewers may read them. For a
+demonstration on sample cards that is acceptable. For real contacts, use the
+paid tier, where that does not apply, or keep the hosted tier disabled.
+
+To run with no model server at all — nothing to download, about a gigabyte of
+memory — disable the two self-hosted tiers and use the `hosted` profile:
+
+```bash
+# in .env
+VLM_GPU_ENABLED=false
+VLM_CPU_ENABLED=false
+VLM_CLOUD_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+VLM_CLOUD_MODEL=gemini-3.6-flash,gemini-3.1-flash-lite
+VLM_CLOUD_API_KEY=...
+
+make deploy-hosted
+```
+
+## 7. Guardrails for a public URL
+
+There are no accounts, so anything the URL exposes is exposed to whoever has
+it. What stops a stranger from reading other people's leads, deleting them, or
+spending the hosted key's quota:
+
+| Guardrail | What it stops | Setting |
+|---|---|---|
+| No endpoint lists batches | Enumerating everyone's leads. A batch is reachable only by its id, an unguessable UUID the uploader's browser keeps. | — |
+| Access code on upload, retry and delete | Strangers spending inference or emptying the database. Constant-time comparison. | `APP_ACCESS_CODE` |
+| Per-address batch limit | A burst of uploads from one address. | `RATE_LIMIT_JOBS` |
+| Per-address card limit | Many small batches adding up to hundreds of cards an hour. | `RATE_LIMIT_IMAGES_PER_HOUR` |
+| Daily hosted-request ceiling | Draining the key's quota, however many addresses are involved. Shared by every worker, survives restarts. | `VLM_CLOUD_DAILY_REQUEST_LIMIT` |
+| Cached health probes | Using the public `/api/v1/ready` to send traffic to the provider on your key. | `PROVIDER_HEALTH_INTERVAL_S` |
+| Key stays server-side | Only the server processes hold the key; it is never sent to the browser or written to the logs. | — |
+
+With `APP_ACCESS_CODE` set, share the link as `https://<host>/?code=<code>`.
+The page stores the code, removes it from the address bar, and sends it with
+every request; anyone without it is asked for it before an upload is sent.
+Reading a batch, and its export, stay open to whoever holds the batch id.
+
+Two things only the key's owner can do, in the provider's console: restrict
+the key to the one API it needs, and rotate it immediately if it is ever
+exposed.
+
+## 8. Configuration reference
 
 Every setting is an environment variable with a safe default;
 [`.env.example`](../.env.example) documents all of them. The ones that change
@@ -242,14 +305,19 @@ behaviour in production:
 | `POSTGRES_PASSWORD` | — | Required. |
 | `VLM_GPU_ENABLED` | `true` | `false` on a CPU host, so the chain does not spend a timeout probing an absent server. |
 | `VLM_CPU_TIMEOUT_S` | `600` | Per-card ceiling on the CPU tier. A 2-vCPU host needs the full value. |
-| `VLM_CLOUD_API_KEY` | *(empty)* | Alibaba Model Studio key for tier 3. Empty disables the tier cleanly. |
+| `VLM_CLOUD_BASE_URL` · `VLM_CLOUD_MODEL` | Model Studio · `qwen3-vl-plus` | Any OpenAI-compatible endpoint; a comma-separated model list is tried in order. |
+| `VLM_CLOUD_API_KEY` | *(empty)* | Key for the hosted tier. Empty disables the tier cleanly. |
+| `VLM_CLOUD_MAX_RETRIES` | `2` | Retries on 429 and 5xx, honouring `Retry-After`, before failing over to the next model. |
+| `VLM_CLOUD_DAILY_REQUEST_LIMIT` | `1000` | Hosted requests per UTC day across all workers. Keep it below the provider's own cap; `0` disables it. |
 | `WORKER_CONCURRENCY` | `2` | Cards in flight. Use `1` on a CPU-only host. |
 | `LLAMA_THREADS` | `nproc` | Set by the bootstrap; llama.cpp mis-detects the CPU count inside a container. |
 | `IMAGE_MAX_EDGE_PX` | `768` | Long-edge cap sent to the model — the dominant latency lever. |
 | `RETENTION_DAYS` | `7` | Batches, leads and images older than this are deleted. |
-| `APP_ACCESS_CODE` | *(empty)* | Optional passcode on the endpoints that cost inference time. |
+| `APP_ACCESS_CODE` | *(empty)* | Optional passcode for uploading, retrying and deleting. Share as `/?code=…`. |
+| `RATE_LIMIT_JOBS` | `5/10minutes` | Batches per client address. |
+| `RATE_LIMIT_IMAGES_PER_HOUR` | `100` | Cards per client address per hour. |
 
-## 7. Troubleshooting
+## 9. Troubleshooting
 
 **`variable is not set` / `is missing a value` from Compose.** `--env-file .env`
 was omitted. Compose looked for `deploy/.env`. Use the Makefile targets or the
@@ -278,6 +346,18 @@ Deep Learning Base AMI.
 **Certificate not issued.** Port 80 must be reachable from the internet for
 the ACME challenge, and `SITE_ADDRESS` must resolve to this host. `docker
 compose logs caddy` names the failing step.
+
+**Cards fail with `daily limit of N hosted requests reached`.** The ceiling did
+its job. It resets at 00:00 UTC. Today's count is in the database:
+`select * from usage_counters order by day desc limit 3;`. Raise
+`VLM_CLOUD_DAILY_REQUEST_LIMIT` only if the provider's own daily cap allows it.
+
+**Hosted tier fails with `HTTP 404`.** The model has been retired for your
+account. List what the key can use with `GET <base-url>/models`, and put a
+current name first in `VLM_CLOUD_MODEL`.
+
+**Uploads return 401 `a valid access code is required`.** `APP_ACCESS_CODE` is
+set. Open the site through the `/?code=…` link, or enter the code when asked.
 
 **Frontend Dockerfile: `"/src": not found`.** The image must be built with the
 repository root as context: `docker build -f frontend/Dockerfile .` — the
