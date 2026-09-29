@@ -268,7 +268,7 @@ async def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level, json_output=settings.is_production)
 
-    chain = ProviderChain.from_settings(settings)
+    chain = ProviderChain.from_settings(settings, session_factory=get_session_factory())
     storage = LocalDiskStorage(settings.storage_local_path)
     worker = Worker(settings, chain, storage)
 

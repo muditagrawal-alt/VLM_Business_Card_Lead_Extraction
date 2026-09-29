@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     # Retries on 429 and 5xx, honouring Retry-After. Free tiers shed load
     # routinely; a short wait usually succeeds where failing over would not.
     vlm_cloud_max_retries: int = Field(default=2, ge=0, le=5)
+    # A ceiling on hosted requests per UTC day, shared by every worker. It
+    # protects the key's quota (and any bill) from a stranger with the URL.
+    # Set below the provider's own daily cap; 0 disables the ceiling.
+    vlm_cloud_daily_request_limit: int = Field(default=1000, ge=0)
 
     # ---- Circuit breaker ----
     breaker_failure_threshold: int = 3

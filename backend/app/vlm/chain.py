@@ -12,11 +12,16 @@ from typing import TYPE_CHECKING
 
 from app.core.logging import get_logger
 from app.models.enums import ProviderTier
+from app.services.budget import DailyBudget
 from app.vlm.circuit_breaker import CircuitBreaker
 from app.vlm.openai_compat import OpenAICompatProvider
 from app.vlm.provider import VLMError
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
     from app.config import Settings
     from app.vlm.provider import VLMProvider, VLMResult
 
@@ -36,6 +41,24 @@ class AllProvidersFailedError(VLMError):
         self.attempts = attempts
 
 
+def budget_guard(budget: DailyBudget) -> Callable[[], Awaitable[None]]:
+    """A pre-request hook that refuses once the day's hosted budget is spent.
+
+    Not retryable: waiting minutes will not help when the limit resets at
+    midnight, and a retry would only ask the database the same question.
+    """
+
+    async def take() -> None:
+        if not await budget.try_take():
+            raise VLMError(
+                f"daily limit of {budget.limit} hosted requests reached; it resets at 00:00 UTC",
+                tier=ProviderTier.CLOUD,
+                retryable=False,
+            )
+
+    return take
+
+
 class ProviderChain:
     """Tries each enabled tier in order until one returns a valid extraction."""
 
@@ -44,7 +67,18 @@ class ProviderChain:
         self._breakers = breakers
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> ProviderChain:
+    def from_settings(
+        cls,
+        settings: Settings,
+        *,
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
+    ) -> ProviderChain:
+        """Build the enabled tiers.
+
+        ``session_factory`` enables the daily ceiling on the hosted tier. The
+        worker passes one because it is the only process that runs inference;
+        the API builds a chain only to report health.
+        """
         providers: list[VLMProvider] = []
         breakers: dict[str, CircuitBreaker] = {}
 
@@ -53,6 +87,10 @@ class ProviderChain:
                 log.info("tier_disabled", tier=name)
                 continue
             tier = ProviderTier(name)
+            before_request = None
+            limit = settings.vlm_cloud_daily_request_limit
+            if tier is ProviderTier.CLOUD and session_factory is not None and limit > 0:
+                before_request = budget_guard(DailyBudget("cloud_requests", limit, session_factory))
             providers.append(
                 OpenAICompatProvider(
                     tier=tier,
@@ -64,6 +102,7 @@ class ProviderChain:
                     # endpoints vary, and a 400 degrades to the next rung.
                     supports_json_schema=config.json_schema,
                     max_retries=config.max_retries,
+                    before_request=before_request,
                 )
             )
             breakers[name] = CircuitBreaker(

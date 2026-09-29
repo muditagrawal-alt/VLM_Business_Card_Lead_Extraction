@@ -16,6 +16,7 @@ from app.models.image import Image
 from app.models.job import Job
 from app.models.lead import Lead
 from app.models.task import Task
+from app.models.usage import UsageCounter
 
 __all__ = [
     "Base",
@@ -28,4 +29,5 @@ __all__ = [
     "ProviderTier",
     "Task",
     "TaskStatus",
+    "UsageCounter",
 ]
