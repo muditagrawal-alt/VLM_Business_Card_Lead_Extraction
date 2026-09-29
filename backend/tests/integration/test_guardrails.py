@@ -96,3 +96,33 @@ class TestAccessCode:
         client, _ = api
         configure(client, app_access_code="")
         assert (await client.post("/api/v1/jobs", files=upload_files(1))).status_code == 201
+
+
+class TestHourlyCardLimit:
+    """The batch limit bounds uploads; this bounds the inference they cost."""
+
+    async def test_cards_beyond_the_hourly_limit_are_refused(self, api) -> None:
+        client, _ = api
+        configure(client, rate_limit_images_per_hour=3)
+
+        first = await client.post("/api/v1/jobs", files=upload_files(2))
+        second = await client.post("/api/v1/jobs", files=upload_files(2))
+
+        assert first.status_code == 201
+        assert second.status_code == 429
+        assert "at most 3 cards" in second.json()["error"]
+        assert "1 remain" in second.json()["error"]
+
+    async def test_a_batch_that_fits_is_accepted(self, api) -> None:
+        client, _ = api
+        configure(client, rate_limit_images_per_hour=3)
+
+        assert (await client.post("/api/v1/jobs", files=upload_files(2))).status_code == 201
+        assert (await client.post("/api/v1/jobs", files=upload_files(1))).status_code == 201
+
+    async def test_zero_disables_the_limit(self, api) -> None:
+        client, _ = api
+        configure(client, rate_limit_images_per_hour=0)
+
+        for _ in range(3):
+            assert (await client.post("/api/v1/jobs", files=upload_files(2))).status_code == 201

@@ -58,8 +58,13 @@ async def create_job(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
 
+    ip_hash = client_ip_hash(request)
+    await _enforce_hourly_card_limit(
+        session, settings.rate_limit_images_per_hour, ip_hash, len(files)
+    )
+
     job = Job(
-        client_ip_hash=client_ip_hash(request),
+        client_ip_hash=ip_hash,
         expires_at=datetime.now(UTC) + timedelta(days=settings.retention_days),
     )
     session.add(job)
@@ -124,6 +129,34 @@ async def create_job(
         duplicates=duplicates,
     )
     return JobCreated(job_id=job.id, accepted=accepted, duplicates=duplicates, rejected=rejected)
+
+
+async def _enforce_hourly_card_limit(
+    session: AsyncSession, limit: int, ip_hash: str | None, incoming: int
+) -> None:
+    """Refuse a batch that would take one address past its hourly card limit.
+
+    The per-batch rate limit bounds uploads, not cards: five batches of fifty is
+    two hundred and fifty inferences in ten minutes from one address. Cards are
+    what cost inference time and quota, so this is the limit that matters.
+    """
+    if limit <= 0 or ip_hash is None:
+        return
+    since = datetime.now(UTC) - timedelta(hours=1)
+    recent = (
+        await session.scalar(
+            select(func.count(Task.id))
+            .join(Job, Task.job_id == Job.id)
+            .where(Job.client_ip_hash == ip_hash, Task.created_at >= since)
+        )
+    ) or 0
+    if recent + incoming > limit:
+        remaining = max(limit - recent, 0)
+        raise AppError(
+            f"at most {limit} cards can be processed per hour from one address; "
+            f"{remaining} remain this hour",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
 
 
 async def _load_job(session: AsyncSession, job_id: UUID) -> Job:
