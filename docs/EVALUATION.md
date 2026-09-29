@@ -31,7 +31,9 @@ first name, last name, position, company, location, phone, email.
 Runs 1–4 are local development numbers: Apple M-series, 24 GB, llama.cpp
 with Metal offload. Runs 5 and 6 are the deployed service — a `Standard_NC4as_T4_v3`
 on Azure (one T4, 16 GB) — driven through the public URL, so they include upload,
-queueing and normalisation, not just inference.
+queueing and normalisation, not just inference. Run 7 is the hosted tier on
+Google's free Gemini API, driven by the harness with the retry and
+structured-output settings production uses.
 
 | Run | Model | Image | Field accuracy | Perfect cards | p50 | p95 | mean |
 |---|---|---|---|---|---|---|---|
@@ -41,14 +43,26 @@ queueing and normalisation, not just inference.
 | **4** | **Qwen3-VL-8B Q8_0** | **768 px** | **100.0 %** | **8 / 8** | **64.4 s** | **72.8 s** | **65.8 s** |
 | **5** | **Qwen3-VL-8B Q8_0 · live T4, cold** | **768 px** | **100.0 %** | **8 / 8** | **10.5 s** | **34.2 s** | **16.3 s** |
 | **6** | **Qwen3-VL-8B Q8_0 · live T4, warm** | **768 px** | **100.0 %** | **8 / 8** | **8.9 s** | **12.1 s** | **9.5 s** |
+| **7** | **Gemini 3.6 Flash · hosted, free tier** | **768 px** | **100.0 %** | **8 / 8** | **16.6 s** | **22.6 s** | **17.4 s** |
 
-Runs 3 to 6 scored 100 % on every field, and every card was answered on the
+Runs 3 to 7 scored 100 % on every field, and every card was answered on the
 strictest structured-output rung (`json_schema`) — no card needed a weaker
 format or a repair attempt. Run 5 was the first batch after the GPU server
 started: the two cards that landed in its cold slots took 34 s each while CUDA
 kernels compiled and the projector ran for the first time, and everything
 after them took 9–13 s. Run 6, on the warm server, cleared the batch in 41 s
 of wall-clock time with two cards in flight.
+
+Run 7 matches the self-hosted 8B field for field, which settles the question
+that mattered for running without a GPU: the hosted tier's output is not a
+downgrade. Its latency is a different story, and most of it is waiting rather
+than reading. Probed one request at a time, the same model answered in about
+4 s; on the free tier roughly one request in seven is shed with a 429 or 503,
+and the client's backoff before retrying is what spreads the run from 8 s to
+32 s. The tier was configured as `gemini-3.6-flash` with `gemini-3.1-flash-lite`
+as the fallback, and the harness does not record which of the two answered
+each card. `gemini-2.5-flash`, the obvious first choice, is no longer served to
+new accounts at all.
 
 ### Real cards
 
@@ -174,8 +188,9 @@ Not yet measured, and required before any accuracy claim is made in the README:
 - **Image resolution.** llama.cpp warns that Qwen-VL wants at least 1024 image
   tokens for reliable grounding, which the current 768 px cap may undercut.
   The trade-off against latency needs measuring, not assuming.
-- **The hosted tier**, which answers on a weaker structured-output rung and so
-  may behave differently on exactly the cards that needed the grammar.
+- **The hosted tier on the real cards.** Gemini matches the 8B on the synthetic
+  set, but the web and wallet cards have been graded only on the self-hosted
+  tier.
 
 Runs are kept as JSON under `eval/results/` so a regression can be diffed
 card by card rather than argued about.
