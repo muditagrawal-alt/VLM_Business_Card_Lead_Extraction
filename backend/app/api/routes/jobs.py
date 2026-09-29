@@ -15,7 +15,7 @@ from app.core.errors import AppError, NotFoundError
 from app.core.logging import get_logger
 from app.core.rate_limit import client_ip_hash, limiter
 from app.models import Image, Job, Task, TaskStatus
-from app.schemas.api import JobCreated, JobDetail, JobOut, TaskOut, UploadRejection
+from app.schemas.api import JobCreated, JobDetail, TaskOut, UploadRejection
 from app.services import queue
 from app.services.images import ImageValidationError, process_upload_async
 
@@ -196,12 +196,10 @@ async def delete_job(job_id: UUID, session: SessionDep) -> None:
     log.info("job_deleted", job_id=str(job_id))
 
 
-@router.get("", response_model=list[JobOut], summary="Recent batches")
-async def list_jobs(session: SessionDep, limit: int = 20) -> list[JobOut]:
-    jobs = (
-        await session.scalars(select(Job).order_by(Job.created_at.desc()).limit(min(limit, 100)))
-    ).all()
-    return [JobOut.model_validate(job) for job in jobs]
+# There is deliberately no endpoint listing batches. Without accounts, a list
+# would be every visitor's batches, and each batch's leads are real people's
+# contact details. A batch id is an unguessable capability: whoever uploaded it
+# has it (the browser keeps its own history), and nobody else can find it.
 
 
 @router.post(
