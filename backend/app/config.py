@@ -23,6 +23,8 @@ class ProviderSettings(BaseSettings):
     model: str = ""
     api_key: str = ""
     timeout_s: float = 60.0
+    json_schema: bool = True
+    max_retries: int = 0
 
 
 class Settings(BaseSettings):
@@ -69,13 +71,21 @@ class Settings(BaseSettings):
     vlm_cpu_model: str = "Qwen3VL-4B-Instruct-Q4_K_M"
     vlm_cpu_timeout_s: float = 180.0
 
-    # ---- Tier 3: hosted Qwen (Alibaba Model Studio) ----
+    # ---- Tier 3: hosted vision model (any OpenAI-compatible endpoint) ----
     # Enabling this means card images leave our server; disclosed in the UI.
     vlm_cloud_enabled: bool = True
     vlm_cloud_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    # A comma-separated list is tried in order. Free tiers retire models and
+    # shed load per model, so a second name keeps the tier answering.
     vlm_cloud_model: str = "qwen3-vl-plus"
     vlm_cloud_api_key: str = ""
     vlm_cloud_timeout_s: float = 90.0
+    # Whether the endpoint accepts response_format json_schema. A 400 falls
+    # through to json_object anyway; this only saves that wasted request.
+    vlm_cloud_json_schema: bool = True
+    # Retries on 429 and 5xx, honouring Retry-After. Free tiers shed load
+    # routinely; a short wait usually succeeds where failing over would not.
+    vlm_cloud_max_retries: int = Field(default=2, ge=0, le=5)
 
     # ---- Circuit breaker ----
     breaker_failure_threshold: int = 3
@@ -138,6 +148,8 @@ class Settings(BaseSettings):
                     model=self.vlm_cloud_model,
                     api_key=self.vlm_cloud_api_key,
                     timeout_s=self.vlm_cloud_timeout_s,
+                    json_schema=self.vlm_cloud_json_schema,
+                    max_retries=self.vlm_cloud_max_retries,
                 ),
             ),
         ]

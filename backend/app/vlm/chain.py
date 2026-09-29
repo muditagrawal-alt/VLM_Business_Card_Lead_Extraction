@@ -60,9 +60,10 @@ class ProviderChain:
                     model=config.model,
                     api_key=config.api_key,
                     timeout_s=config.timeout_s,
-                    # Only the self-hosted tiers compile the schema into a
-                    # grammar; hosted endpoints vary, so the client degrades.
-                    supports_json_schema=tier is not ProviderTier.CLOUD,
+                    # llama.cpp compiles the schema into a grammar; hosted
+                    # endpoints vary, and a 400 degrades to the next rung.
+                    supports_json_schema=config.json_schema,
+                    max_retries=config.max_retries,
                 )
             )
             breakers[name] = CircuitBreaker(

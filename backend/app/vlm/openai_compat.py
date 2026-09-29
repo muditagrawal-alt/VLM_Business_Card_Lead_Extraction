@@ -14,14 +14,21 @@ Structured output is requested through a ladder of decreasing strictness:
 If the parsed payload still fails validation, one repair attempt is made with
 the validation error fed back. The rung that succeeded is recorded on the task,
 so accuracy comparisons between tiers stay honest.
+
+Hosted free tiers add two failure modes local servers do not have: a model is
+retired from under you (404), or sheds load (429, 503). The client retries the
+second with backoff and fails over to the next configured model for both,
+recording the model that actually answered.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+import random
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from pydantic import ValidationError
@@ -31,6 +38,9 @@ from app.models.enums import OutputMode, ProviderTier
 from app.schemas.extraction import CardExtraction
 from app.vlm.prompts import build_messages
 from app.vlm.provider import VLMError, VLMResult
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 log = get_logger(__name__)
 
@@ -46,6 +56,11 @@ _TEMPERATURE = 0.0
 # reading silently lost their contact details instead of failing loudly.
 _MAX_TOKENS = 3072
 
+# Statuses that mean "try again shortly" rather than "this request is wrong".
+_TRANSIENT = frozenset({429, 500, 502, 503, 504})
+# A provider asking for a minute-long pause is better failed over than waited on.
+_MAX_BACKOFF_S = 10.0
+
 
 class OpenAICompatProvider:
     """A single tier backed by an OpenAI-compatible chat completions endpoint."""
@@ -59,12 +74,25 @@ class OpenAICompatProvider:
         api_key: str = "",
         timeout_s: float = 60.0,
         supports_json_schema: bool = True,
+        max_retries: int = 0,
+        retry_base_s: float = 1.5,
+        before_request: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self.tier = tier
-        self.model = model
+        self._models = [name.strip() for name in model.split(",") if name.strip()]
+        if not self._models:
+            raise ValueError(f"no model configured for the {tier.value} tier")
+        # The primary model, for logs and readiness; results record the one
+        # that actually answered.
+        self.model = self._models[0]
         self._timeout_s = timeout_s
         self._base_url = base_url.rstrip("/")
         self._supports_json_schema = supports_json_schema
+        self._max_retries = max_retries
+        self._retry_base_s = retry_base_s
+        # Called before every request: the hook that enforces a daily ceiling
+        # on a metered provider. It raises to refuse.
+        self._before_request = before_request
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -102,13 +130,13 @@ class OpenAICompatProvider:
         last_error: Exception | None = None
         for mode, response_format in attempts:
             try:
-                payload = await self._complete(messages, response_format)
+                payload, model = await self._complete(messages, response_format)
                 text = self._content(payload)
                 extraction = self._parse(text)
                 return VLMResult(
                     extraction=extraction,
                     tier=self.tier,
-                    model=self.model,
+                    model=model,
                     output_mode=mode,
                     latency_ms=int((time.perf_counter() - started) * 1000),
                     raw_response={"mode": mode.value, "content": text},
@@ -156,10 +184,11 @@ class OpenAICompatProvider:
         # the error fed back before giving up on this tier.
         repaired = await self._repair(messages, last_error)
         if repaired is not None:
+            extraction, model = repaired
             return VLMResult(
-                extraction=repaired,
+                extraction=extraction,
                 tier=self.tier,
-                model=self.model,
+                model=model,
                 output_mode=OutputMode.REPAIRED,
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 raw_response={"mode": OutputMode.REPAIRED.value},
@@ -192,19 +221,75 @@ class OpenAICompatProvider:
 
     async def _complete(
         self, messages: list[dict[str, object]], response_format: dict[str, Any] | None
-    ) -> dict[str, Any]:
-        body: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": _TEMPERATURE,
-            "max_tokens": _MAX_TOKENS,
-        }
-        if response_format is not None:
-            body["response_format"] = response_format
+    ) -> tuple[dict[str, Any], str]:
+        """POST one completion; return the payload and the model that answered.
 
-        response = await self._client.post("/chat/completions", json=body)
-        response.raise_for_status()
-        return response.json()
+        Each configured model is tried in order. Within a model, 429 and 5xx
+        are retried with backoff. A 404 (the model was retired) or exhausted
+        retries move on to the next model. Anything else is raised for the
+        caller's degradation ladder to judge: a 400 there means the response
+        format was rejected, which a different model would reject as well.
+        """
+        last_error: httpx.HTTPStatusError | None = None
+        for index, model in enumerate(self._models):
+            has_next_model = index + 1 < len(self._models)
+            for attempt in range(self._max_retries + 1):
+                if self._before_request is not None:
+                    await self._before_request()
+
+                body: dict[str, Any] = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": _TEMPERATURE,
+                    "max_tokens": _MAX_TOKENS,
+                }
+                if response_format is not None:
+                    body["response_format"] = response_format
+
+                response = await self._client.post("/chat/completions", json=body)
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    last_error = exc
+                else:
+                    return response.json(), model
+
+                status = response.status_code
+                if status == httpx.codes.NOT_FOUND and has_next_model:
+                    log.warning("model_unavailable", tier=self.tier.value, model=model)
+                    break
+                if status in _TRANSIENT:
+                    if attempt < self._max_retries:
+                        delay = self._backoff(response, attempt)
+                        log.info(
+                            "provider_backoff",
+                            tier=self.tier.value,
+                            model=model,
+                            status=status,
+                            delay_s=round(delay, 1),
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    if has_next_model:
+                        log.warning("model_exhausted", tier=self.tier.value, model=model)
+                        break
+                raise last_error
+
+        # Only reachable when every model ended on a failover condition.
+        assert last_error is not None
+        raise last_error
+
+    def _backoff(self, response: httpx.Response, attempt: int) -> float:
+        """Seconds to wait before retrying, preferring the provider's own advice."""
+        retry_after = response.headers.get("retry-after")
+        if retry_after:
+            try:
+                return min(max(float(retry_after), 0.0), _MAX_BACKOFF_S)
+            except ValueError:
+                pass  # An HTTP-date; exponential backoff is close enough.
+        base = min(self._retry_base_s * 2**attempt, _MAX_BACKOFF_S)
+        # Jitter, so two workers that failed together do not retry together.
+        return base + random.uniform(0, self._retry_base_s / 3)  # noqa: S311
 
     @staticmethod
     def _content(payload: dict[str, Any]) -> str:
@@ -241,7 +326,7 @@ class OpenAICompatProvider:
 
     async def _repair(
         self, messages: list[dict[str, object]], error: Exception | None
-    ) -> CardExtraction | None:
+    ) -> tuple[CardExtraction, str] | None:
         if error is None:
             return None
         repair_messages = [
@@ -256,8 +341,8 @@ class OpenAICompatProvider:
             },
         ]
         try:
-            payload = await self._complete(repair_messages, {"type": "json_object"})
-            return self._parse(self._content(payload))
+            payload, model = await self._complete(repair_messages, {"type": "json_object"})
+            return self._parse(self._content(payload)), model
         except (httpx.HTTPError, ValidationError, ValueError, KeyError) as exc:
             log.warning("repair_attempt_failed", tier=self.tier.value, error=str(exc)[:200])
             return None
