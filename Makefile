@@ -135,3 +135,7 @@ deploy-gpu: ## Bring up the GPU profile on the server
 .PHONY: deploy-cpu
 deploy-cpu: ## Bring up the CPU-only profile (credit-saving mode)
 	docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile cpu up -d --build
+
+.PHONY: deploy-hosted
+deploy-hosted: ## Bring up the stack with no model server; every card goes to the hosted tier
+	docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile hosted up -d --build
