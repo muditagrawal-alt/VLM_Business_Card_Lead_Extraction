@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Header, Request, status
@@ -39,13 +40,17 @@ async def require_access_code(
 ) -> None:
     """Optional shared passcode for the public demo.
 
-    Off by default. When set, it gates only the endpoints that cost inference
-    time, so a reviewer can be given a link that strangers cannot run up a
-    bill on.
+    Off by default. When set, it gates every endpoint that spends inference or
+    destroys data — uploading, retrying and deleting — so a reviewer can be
+    given a link that strangers cannot run up a bill on or empty. Reading a
+    batch is not gated: its id is an unguessable capability already.
     """
     if not settings.app_access_code:
         return
-    if x_access_code != settings.app_access_code:
+    # compare_digest, not ==: an ordinary comparison returns at the first
+    # differing byte, and the timing difference leaks the code a byte at a time.
+    supplied = (x_access_code or "").encode()
+    if not hmac.compare_digest(supplied, settings.app_access_code.encode()):
         raise AppError("a valid access code is required", status_code=status.HTTP_401_UNAUTHORIZED)
 
 

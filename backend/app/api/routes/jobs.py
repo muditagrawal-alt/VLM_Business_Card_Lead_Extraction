@@ -185,7 +185,7 @@ async def _estimate_remaining(session: AsyncSession, job: Job) -> int | None:
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a batch")
-async def delete_job(job_id: UUID, session: SessionDep) -> None:
+async def delete_job(job_id: UUID, session: SessionDep, _: AccessCodeDep) -> None:
     """Delete a batch and everything extracted from it.
 
     Images are content-addressed and may be shared with another batch, so the
@@ -207,7 +207,7 @@ async def delete_job(job_id: UUID, session: SessionDep) -> None:
     response_model=TaskOut,
     summary="Retry a failed card",
 )
-async def retry_task(job_id: UUID, task_id: UUID, session: SessionDep) -> TaskOut:
+async def retry_task(job_id: UUID, task_id: UUID, session: SessionDep, _: AccessCodeDep) -> TaskOut:
     """Requeue a single failed card.
 
     The attempt counter is reset because this is a deliberate human decision,
