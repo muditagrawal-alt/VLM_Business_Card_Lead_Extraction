@@ -1,7 +1,13 @@
 import { getAccessCode } from '@/lib/accessCode';
 import type { Job, JobCreated, Lead, LeadUpdate, Task } from '@/types/api';
 
-const BASE = '/api/v1';
+/**
+ * Where the API lives. Empty means the same origin, as when Caddy serves the
+ * SPA; a static host such as Vercel is built with VITE_API_BASE_URL set to the
+ * API's own address, and the browser calls it directly.
+ */
+const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+const BASE = `${API_ORIGIN}/api/v1`;
 
 /** An API error carrying the backend's own message, which is user-facing. */
 export class ApiError extends Error {

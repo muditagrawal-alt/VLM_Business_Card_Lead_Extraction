@@ -1,10 +1,50 @@
 import { defineConfig } from 'vitest/config';
+import { loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
+/**
+ * A Content-Security-Policy for the built page, allowing exactly one API origin.
+ *
+ * Caddy sends the policy as a header when it serves the SPA itself. A static
+ * host has no Caddy, and the policy has to name the API's origin, which is
+ * only known at build time, so it is written into the HTML instead. Build only:
+ * the dev server relies on inline scripts and a websocket for hot reload.
+ * frame-ancestors cannot be set from a meta tag; the static host's own headers
+ * (vercel.json) cover framing.
+ */
+function contentSecurityPolicy(apiBase: string): Plugin {
+  const api = apiBase ? ` ${new URL(apiBase).origin}` : '';
+  const policy = [
+    "default-src 'self'",
+    `connect-src 'self'${api}`,
+    `img-src 'self' data: blob:${api}`,
+    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ');
+  return {
+    name: 'content-security-policy',
+    apply: 'build',
+    transformIndexHtml: () => [
+      {
+        tag: 'meta',
+        attrs: { 'http-equiv': 'Content-Security-Policy', content: policy },
+        injectTo: 'head-prepend',
+      },
+    ],
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  plugins: [
+    react(),
+    tailwindcss(),
+    contentSecurityPolicy(loadEnv(mode, process.cwd(), 'VITE_').VITE_API_BASE_URL ?? ''),
+  ],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
@@ -46,4 +86,4 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
   },
-});
+}));
