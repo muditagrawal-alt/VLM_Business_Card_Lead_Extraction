@@ -33,6 +33,14 @@ x-app-env: &app-env
   VLM_CLOUD_BASE_URL: ${VLM_CLOUD_BASE_URL:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
   VLM_CLOUD_MODEL: ${VLM_CLOUD_MODEL:-qwen3-vl-plus}
   VLM_CLOUD_API_KEY: ${VLM_CLOUD_API_KEY:-}
+  VLM_CLOUD_TIMEOUT_S: ${VLM_CLOUD_TIMEOUT_S:-90}
+  VLM_CLOUD_JSON_SCHEMA: ${VLM_CLOUD_JSON_SCHEMA:-true}
+  VLM_CLOUD_MAX_RETRIES: ${VLM_CLOUD_MAX_RETRIES:-2}
+  # The shared daily ceiling on hosted requests. Keep it below the provider's
+  # own daily cap so the key's quota can never be exhausted by the public URL.
+  VLM_CLOUD_DAILY_REQUEST_LIMIT: ${VLM_CLOUD_DAILY_REQUEST_LIMIT:-1000}
+  RATE_LIMIT_JOBS: ${RATE_LIMIT_JOBS:-5/10minutes}
+  RATE_LIMIT_IMAGES_PER_HOUR: ${RATE_LIMIT_IMAGES_PER_HOUR:-100}
 
 services:
   caddy:
