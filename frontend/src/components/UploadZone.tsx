@@ -1,4 +1,10 @@
 import imageCompression from 'browser-image-compression';
+// The library compresses in a Web Worker that, by default, importScripts() its
+// own code from a public CDN. That is third-party code running on this page,
+// and the Content-Security-Policy rightly refused it, so compression silently
+// fell back to uploading full-size photos. A copy shipped with the app is
+// loaded instead, from this origin.
+import compressionWorkerScript from 'browser-image-compression/dist/browser-image-compression.js?url';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, ImagePlus, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -74,6 +80,7 @@ export function UploadZone({ onSubmit, busy }: Props) {
                 maxWidthOrHeight: CLIENT_MAX_EDGE,
                 maxSizeMB: CLIENT_MAX_MB,
                 useWebWorker: true,
+                libURL: new URL(compressionWorkerScript, window.location.href).href,
                 fileType: 'image/jpeg',
               });
             } catch {

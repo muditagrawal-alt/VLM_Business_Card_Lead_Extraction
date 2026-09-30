@@ -23,7 +23,7 @@
 		# The SPA loads no third-party scripts, so the policy can be strict.
 		# 'unsafe-inline' for styles only: the bundler inlines a small
 		# critical stylesheet.
-		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
 		-Server
 	}
 

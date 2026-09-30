@@ -22,6 +22,8 @@ function contentSecurityPolicy(apiBase: string): Plugin {
     `img-src 'self' data: blob:${api}`,
     "style-src 'self' 'unsafe-inline'",
     "script-src 'self'",
+    // Image compression runs in a worker built from a blob: URL.
+    "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
