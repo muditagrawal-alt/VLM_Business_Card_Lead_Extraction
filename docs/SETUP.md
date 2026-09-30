@@ -267,6 +267,53 @@ VLM_CLOUD_API_KEY=...
 make deploy-hosted
 ```
 
+### The live deployment: frontend on Vercel, API on Oracle Cloud
+
+The free deployment splits the two halves. Vercel serves the built SPA, and an
+Oracle Cloud Always Free Ampere A1 instance runs the hosted profile. The
+browser calls the API directly rather than through Vercel's proxy: the proxy's
+limit on request size is not documented, which a 50-card upload could hit,
+and every visitor would reach the API from Vercel's addresses, collapsing the
+per-address limits into one shared bucket.
+
+**Oracle.** Create an instance with image *Canonical Ubuntu 24.04* and shape
+*VM.Standard.A1.Flex*. 1 OCPU / 6 GB is ample for this profile and far easier to
+place than 2 / 12 when a region is short of ARM capacity. Open ports 80 and 443
+in the subnet's security list, then:
+
+```bash
+scp .env ubuntu@<ip>:/tmp/.env
+ssh ubuntu@<ip> 'sudo mkdir -p /opt/vlm-leads && sudo mv /tmp/.env /opt/vlm-leads/.env'
+ssh ubuntu@<ip> 'curl -fsSL https://raw.githubusercontent.com/muditagrawal-alt/VLM_Business_Card_Lead_Extraction/main/deploy/oracle/bootstrap.sh | sudo bash'
+```
+
+`deploy/oracle/bootstrap.sh` also opens 80 and 443 in the instance's own
+firewall: Oracle's Ubuntu images reject everything but SSH in iptables,
+independently of the security list, and without that Let's Encrypt's challenge
+never arrives. It installs Docker, forces the self-hosted tiers off and waits
+until the API reports ready. Every compiled dependency ships an arm64 wheel,
+so the images build unchanged.
+
+**Vercel.** From `frontend/`, with the Vercel CLI logged in:
+
+```bash
+vercel project add <name>
+vercel link --yes --project <name>
+printf 'https://<api-host>' | vercel env add VITE_API_BASE_URL production
+vercel deploy --prod
+```
+
+Importing the repository in the dashboard works as well: Root Directory
+`frontend`, and the same variable. It is read at build time, and the build
+writes a Content-Security-Policy that allows exactly that API origin.
+
+**Connect them.** Set `APP_CORS_ORIGINS=https://<name>.vercel.app` in the
+server's `.env` and recreate the API container:
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile hosted up -d api
+```
+
 ## 7. Guardrails for a public URL
 
 There are no accounts, so anything the URL exposes is exposed to whoever has
@@ -314,6 +361,8 @@ behaviour in production:
 | `IMAGE_MAX_EDGE_PX` | `768` | Long-edge cap sent to the model — the dominant latency lever. |
 | `RETENTION_DAYS` | `7` | Batches, leads and images older than this are deleted. |
 | `APP_ACCESS_CODE` | *(empty)* | Optional passcode for uploading, retrying and deleting. Share as `/?code=…`. |
+| `APP_CORS_ORIGINS` | *(empty)* | Browser origins allowed to call the API, comma-separated: the static host when the SPA is served there. |
+| `VITE_API_BASE_URL` | *(empty)* | Frontend build only: the API's origin when the SPA is hosted elsewhere. |
 | `RATE_LIMIT_JOBS` | `5/10minutes` | Batches per client address. |
 | `RATE_LIMIT_IMAGES_PER_HOUR` | `100` | Cards per client address per hour. |
 
@@ -358,6 +407,16 @@ current name first in `VLM_CLOUD_MODEL`.
 
 **Uploads return 401 `a valid access code is required`.** `APP_ACCESS_CODE` is
 set. Open the site through the `/?code=…` link, or enter the code when asked.
+
+**The Vercel page loads, but every request fails with a CORS error.** The API
+does not list the page's origin. Set `APP_CORS_ORIGINS` to it exactly (scheme
+and host, e.g. `https://app.vercel.app`) and recreate the `api` container;
+`docker compose … exec api env | grep CORS` shows what the container actually
+received.
+
+**Oracle refuses the instance with `Out of host capacity`.** The region is short
+of ARM hosts. Try another availability domain, a smaller shape (1 OCPU / 6 GB is
+enough), or retry later.
 
 **Frontend Dockerfile: `"/src": not found`.** The image must be built with the
 repository root as context: `docker build -f frontend/Dockerfile .` — the

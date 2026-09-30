@@ -156,6 +156,7 @@ images are shared and left to the retention sweep.
 | User corrections | Normalised through the same code as extracted values. |
 | Client IP | Stored only as a salted hash. |
 | Batch ids | Unguessable UUIDs, and no endpoint lists them, so one visitor cannot find another's leads. |
+| Cross-origin callers | Only the origins in `APP_CORS_ORIGINS` may call the API from a browser, with the four methods and one custom header the app uses, and no credentials. |
 | Mutating endpoints | Upload, retry and delete require `APP_ACCESS_CODE` when it is set, compared in constant time. |
 | Hosted tier | Off-box. Disclosed per row in the UI and disableable entirely. |
 | Hosted key | Server-side only. A daily ceiling in PostgreSQL bounds what the public URL can spend, and health probes are cached so `/ready` cannot be used to call the provider. |
