@@ -126,7 +126,7 @@ between them, so a GPU deployment and a CPU deployment differ only in
 configuration.
 
 **No domain is needed.** The site address uses [sslip.io](https://sslip.io),
-which resolves `anything-20-80-103-145.sslip.io` to `20.80.103.145`, and Caddy
+which resolves `anything-129-146-106-98.sslip.io` to `129.146.106.98`, and Caddy
 obtains a real Let's Encrypt certificate for it. Set `SITE_ADDRESS` to that
 name (a comma-separated list is accepted) and `ACME_EMAIL` to yours.
 
@@ -136,7 +136,7 @@ be passed explicitly — the Makefile and bootstrap scripts always do. The
 minimum for production:
 
 ```bash
-SITE_ADDRESS=muditagrawal-20-80-103-145.sslip.io, 20-80-103-145.sslip.io
+SITE_ADDRESS=muditagrawal-129-146-106-98.sslip.io, 129-146-106-98.sslip.io
 ACME_EMAIL=you@example.com
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 VLM_CLOUD_API_KEY=                 # optional; empty disables the hosted tier
