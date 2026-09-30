@@ -19,6 +19,17 @@ x-app-env: &app-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-leads}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-leads}
   STORAGE_LOCAL_PATH: /app/storage
   APP_ACCESS_CODE: ${APP_ACCESS_CODE:-}
+  # Origins allowed to call the API from a browser: the static host's address
+  # when the SPA is served there rather than by Caddy.
+  APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-}
+  MAX_FILES_PER_JOB: ${MAX_FILES_PER_JOB:-50}
+  MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10}
+  WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+  TASK_MAX_ATTEMPTS: ${TASK_MAX_ATTEMPTS:-2}
+  TASK_LEASE_SECONDS: ${TASK_LEASE_SECONDS:-300}
+  BREAKER_FAILURE_THRESHOLD: ${BREAKER_FAILURE_THRESHOLD:-3}
+  BREAKER_RESET_SECONDS: ${BREAKER_RESET_SECONDS:-60}
+  PROVIDER_HEALTH_INTERVAL_S: ${PROVIDER_HEALTH_INTERVAL_S:-15}
   IMAGE_MAX_EDGE_PX: ${IMAGE_MAX_EDGE_PX:-768}
   RETENTION_DAYS: ${RETENTION_DAYS:-7}
   # Tier 1 is present only under the gpu profile; when it is absent the
@@ -26,6 +37,7 @@ x-app-env: &app-env
   VLM_GPU_ENABLED: ${VLM_GPU_ENABLED:-true}
   VLM_GPU_BASE_URL: http://llama-gpu:8080/v1
   VLM_GPU_MODEL: Qwen3VL-8B-Instruct-Q8_0
+  VLM_GPU_TIMEOUT_S: ${VLM_GPU_TIMEOUT_S:-60}
   VLM_CPU_ENABLED: ${VLM_CPU_ENABLED:-true}
   VLM_CPU_BASE_URL: http://llama-cpu:8080/v1
   VLM_CPU_MODEL: Qwen3VL-4B-Instruct-Q4_K_M
