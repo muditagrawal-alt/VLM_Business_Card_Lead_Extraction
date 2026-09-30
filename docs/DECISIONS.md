@@ -278,3 +278,38 @@ and it is stated in the setup guide, the runbook and the README; for real
 contacts, the paid tier or the self-hosted tiers are the answer. The hosted
 tier remains switchable off entirely.
 
+---
+
+## 14. Frontend on Vercel, API on Oracle Cloud, and the browser calls the API directly
+
+**Chosen:** the built SPA on Vercel; Caddy, the API, the worker and PostgreSQL
+on an Oracle Cloud Always Free Ampere A1 instance; the browser calling the API
+across origins, allowed by an explicit CORS list.
+
+The goal was a deployment that costs nothing and stays up. A free always-on
+GPU does not exist, and Gemini's free tier made one unnecessary, so what was
+left to host was a small API with a queue and a database. Of the free options,
+only a VM runs the Compose stack unchanged: Render's free plan has no
+background workers and its PostgreSQL expires after thirty days, Koyeb now
+requires a paid plan for new accounts, and Hugging Face charges for Docker
+Spaces. Oracle's Always Free A1 is a real VM, and every compiled dependency
+already ships an arm64 wheel. Vercel serves the SPA from a CDN for free and
+deploys it in a minute.
+
+Vercel could have proxied `/api` to Oracle and kept one origin. It was not
+used for two reasons. Its limit on proxied request size is not documented,
+and a 50-card upload is around 15 MB. And every request would reach the API
+from Vercel's addresses, so the per-address rate limits would stop meaning
+one visitor and start meaning everyone. Direct calls cost a CORS policy — the
+one origin, four methods, one custom header, no credentials — and a
+Content-Security-Policy written into the build naming the API's origin, since
+the static host has no Caddy to send one.
+
+Deploying it found three bugs that tests of either half alone had not: the
+new CORS setting never reached the containers, because the production compose
+file lists the environment explicitly (now guarded by a test that found
+fourteen more); the image-compression worker fetched its code from a public
+CDN, which the security policy blocked (it now ships with the app); and
+Oracle's Ubuntu images block ports 80 and 443 in the host firewall regardless
+of the cloud security list (the bootstrap opens them).
+
