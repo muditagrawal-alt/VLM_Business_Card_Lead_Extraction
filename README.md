@@ -6,7 +6,7 @@
 
 Upload cards in bulk · extract seven structured fields per card · review and correct in the browser · export a formatted Excel workbook.
 
-**[Live deployment status →](#live-deployment)**
+**[Open the live app →](https://muditagrawal-lead-extraction.vercel.app)**
 
 [Setup guide](docs/SETUP.md) · [Architecture](docs/ARCHITECTURE.md) · [Design decisions](docs/DECISIONS.md) · [Evaluation](docs/EVALUATION.md) · [Runbook](docs/RUNBOOK.md)
 
@@ -30,7 +30,7 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 | Asked for | Where it is |
 |---|---|
-| Publicly accessible deployed application | See [Live deployment](#live-deployment): the GPU deployment is recorded in the [demo video](docs/media/demo.mp4), and its free replacement is linked there |
+| Publicly accessible deployed application | <https://muditagrawal-lead-extraction.vercel.app>: frontend on Vercel, API on Oracle Cloud. See [Live deployment](#live-deployment) |
 | Source code | This repository: <https://github.com/muditagrawal-alt/VLM_Business_Card_Lead_Extraction> |
 | Setup and deployment instructions | [Quick start](#quick-start) and [Deployment](#deployment) here; the full walkthrough for both clouds in [docs/SETUP.md](docs/SETUP.md) |
 | Architecture and major technical decisions | [How it works](#how-it-works), then [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md) |
@@ -61,15 +61,32 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 ## Live deployment
 
-> **Status, 29 September 2026.** The GPU deployment below ran from 18 to 25 September and has been shut down to stop spending cloud credit. The demo video, the screenshots and every live figure in this README were recorded on it. Its replacement costs nothing to run: no model server, every card read by Gemini's free tier through the [`hosted` profile](docs/SETUP.md#6-without-a-gpu-the-hosted-tier), which scored **100 %** on the evaluation set. Its link will be published here when it is up.
+**<https://muditagrawal-lead-extraction.vercel.app>**. There is no login. Uploading, retrying and deleting ask for the access code sent with the submission, so a stranger with the link cannot spend the model's quota.
 
-| | The GPU deployment, 18–25 September |
+| | |
 |---|---|
-| **Ran on** | One `Standard_NC4as_T4_v3` VM on Azure (Central US): 4 vCPU, 28 GB, one NVIDIA T4 16 GB, TLS by Let's Encrypt |
-| **Served** | Qwen3-VL-8B-Instruct Q8_0 on the GPU as tier 1; Qwen3-VL-4B Q4_K_M on the CPU as tier 2 |
-| **Measured** | A warm server cleared an 8-card batch in **41 seconds** — about 9 s per card, two in flight — and scored **100 %** on the evaluation set through the public URL |
+| **Frontend** | The built SPA on Vercel, with a Content-Security-Policy that allows exactly the API's origin |
+| **API** | `https://muditagrawal-129-146-106-98.sslip.io`: Caddy, FastAPI, the worker and PostgreSQL on an Oracle Cloud Always Free Ampere A1 instance (1 OCPU / 6 GB, Phoenix), TLS by Let's Encrypt |
+| **Model** | Gemini 3.6 Flash on Google's free tier, falling back to 3.1 Flash-Lite. The page names the model and warns that the free tier may use submitted cards |
+| **Measured** | A three-card batch through the public site in **33 s**, 100 % on the evaluation set, and nothing to pay |
 
-**Why Azure, when the brief said AWS.** The stack was built for AWS and first went live there on an `m7i-flex.large` (the free-tier-equivalent, CPU profile), where a card takes about 113 s. AWS then declined the G-instance vCPU quota for a new account — the standard answer, appealed and escalated to the EC2 service team, still pending at the time of writing. Azure approved a T4 in fifteen minutes. The Compose file, the images and the bootstrap logic are the same on both clouds; the only Azure-specific code is an 85-line script that installs the NVIDIA driver and container toolkit the AWS image ships pre-installed. Both paths are documented in the [setup guide](docs/SETUP.md), and the AWS deployment comes back with one command when the quota lands.
+```mermaid
+flowchart LR
+    B[Browser] -- "HTML · JS" --> V["Vercel<br/>static SPA"]
+    B -- "HTTPS · CORS · access code" --> C["Oracle Cloud A1<br/>Caddy · FastAPI · worker · PostgreSQL"]
+    C -- "OpenAI-compatible API" --> G["Gemini<br/>free tier"]
+```
+
+The browser calls the API directly, not through Vercel's proxy. Proxied, every request would arrive from Vercel's addresses, and the per-address rate limits would stop meaning one visitor. [Decision 14](docs/DECISIONS.md) has the reasoning, and the [setup guide](docs/SETUP.md#the-live-deployment-frontend-on-vercel-api-on-oracle-cloud) has the procedure.
+
+**Earlier deployments.** They are kept here because every self-hosted figure in this README was measured on them.
+
+| Where | When | Served | Measured |
+|---|---|---|---|
+| Azure `Standard_NC4as_T4_v3`, one NVIDIA T4 | 18–25 Sept | Qwen3-VL-8B Q8_0 on the GPU, 4B on the CPU | An 8-card batch in 41 s, about 9 s a card, and 100 % on the evaluation set. The demo video and screenshots were recorded here |
+| AWS `m7i-flex.large`, 2 vCPU | September | Qwen3-VL-4B on the CPU | About 113 s a card |
+
+**Why the brief's AWS is not the live host.** The stack was built for AWS and first went live there, on the free-tier-equivalent CPU instance. AWS then declined the GPU quota for a new account, and the appeal went to the EC2 service team. Azure approved a T4 in fifteen minutes and served the review window, and the GPU was then shut down to stop spending credit. The live deployment now costs nothing. The same Compose file and images run on all of these clouds, and every path is in the [setup guide](docs/SETUP.md).
 
 ## What it does
 
@@ -223,6 +240,7 @@ Every setting is an environment variable with a safe default, so one image runs 
 | `RETENTION_DAYS` | `7` | After this, batches, leads and images are deleted. |
 | `RATE_LIMIT_IMAGES_PER_HOUR` | `100` | Cards per client address per hour. |
 | `APP_ACCESS_CODE` | *(empty)* | Optional passcode for uploading, retrying and deleting; it can travel in the link as `/?code=…`. |
+| `APP_CORS_ORIGINS` | *(empty)* | Browser origins allowed to call the API: the static host, when the SPA is served there. |
 
 ## API
 
@@ -263,7 +281,7 @@ CI runs both suites, builds both container images, and applies every migration f
 
 ## Deployment
 
-One VM running Docker Compose behind Caddy, which terminates TLS and serves the built SPA. Three profiles over one Compose file:
+One VM running Docker Compose behind Caddy, which terminates TLS and serves the built SPA. The live deployment moves the SPA to Vercel and keeps the rest on the VM. Three profiles over one Compose file:
 
 ```bash
 docker compose --env-file .env -f deploy/docker-compose.prod.yml --profile gpu up -d --build
@@ -279,6 +297,8 @@ The `cpu` profile is the same stack without the GPU container; `hosted` runs no 
 | AWS | `m7i-flex.large` (CPU) | `deploy/ec2/user-data-cpu.sh` | The free-tier-equivalent; 4B model only |
 | Azure | `Standard_NC4as_T4_v3` (T4) | `deploy/azure/bootstrap-gpu.sh` | Installs the driver and toolkit, then runs the EC2 script unchanged |
 | Any | ~1 GB, no GPU | `make deploy-hosted` | Hosted profile: no weights to download, every card to the hosted tier |
+| Oracle Cloud | Always Free Ampere A1 (arm64) | `deploy/oracle/bootstrap.sh` | Hosted profile; also opens ports 80 and 443 in the host firewall, which Oracle's images close |
+| Vercel | Static | `frontend/vercel.json` | The SPA alone, built with `VITE_API_BASE_URL` pointing at the API |
 
 Every bootstrap verifies the GPU is visible *from inside a container*, downloads weights with retries, and waits for `/api/v1/ready` rather than reporting success when containers start. No domain is needed: [sslip.io](https://sslip.io) resolves the IP-encoded host name and Caddy obtains a real certificate for it.
 
@@ -363,6 +383,8 @@ pytest · pytest-asyncio · respx · aiosqlite · ruff · pyright · Vitest · T
 |---|---|
 | Azure `Standard_NC4as_T4_v3`, Central US | The GPU deployment, 18–25 September (quota via support ticket, approved in ~15 min); shut down to stop spending credit |
 | AWS EC2 `m7i-flex.large`, us-east-1 | The first deployment, CPU profile; the GPU quota appeal is with the EC2 service team |
+| Oracle Cloud, Always Free Ampere A1, Phoenix | The live API: Caddy, FastAPI, the worker and PostgreSQL |
+| Vercel | The live frontend |
 | sslip.io · Let's Encrypt | A public host name and a real certificate without buying a domain |
 | Hugging Face Hub | Model weights, fetched at deploy time |
 | Google AI Studio (Gemini API) | The hosted tier on its free plan |
@@ -384,6 +406,7 @@ pytest · pytest-asyncio · respx · aiosqlite · ruff · pyright · Vitest · T
 | **Single instance, local storage** | Enough for the assignment; the storage interface already allows an S3 backend | S3 for images, more than one worker, a managed PostgreSQL |
 | **The free hosted tier is slower and less predictable than the GPU** | About one request in seven is shed, and the backoff puts the median at 16.6 s against 8.9 s on the T4 | A paid tier, or the GPU again when the AWS quota lands |
 | **Gemini's free tier may use submitted cards** to improve Google's products | The provider's free-tier terms | The paid tier, or the self-hosted tiers, for real contacts |
+| **The live API is one small ARM instance** | Always Free: 1 OCPU / 6 GB. On a free-tier account, Oracle may reclaim an instance that sits idle for a week | Upgrade the account to Pay As You Go, where Always Free resources stay free and are not reclaimed |
 | **No login** | Out of scope per the brief; `APP_ACCESS_CODE` gates upload, retry and delete, and can travel in the link | Proper auth if it were shared beyond a review |
 
 ### What I would do first
@@ -431,7 +454,7 @@ The working arrangement was that I owned the problem, the decisions and the acce
 - **I set the scope and the constraints up front** — the seven fields the brief asks for, self-hosted Qwen with an offline-first build, a production-grade bar rather than a prototype, no versions or milestones ("we are building the final end product"), and O-HIVE's own design language for the interface.
 - **I decided the shape of the system**: GPU primary, CPU fallback, hosted fallback, in that order; PostgreSQL rather than a broker; a single VM with two Compose profiles; no authentication for the assignment.
 - **I supplied the test material and the verdicts.** The real cards came from the web and from a wallet at home; I looked at what came back, said which extractions were wrong, and sent them back to be fixed one at a time. The evaluation set, the ground truth, and the rule that a number is *never* guessed all came out of those rounds.
-- **I ran the cloud accounts** — AWS, then GCP, then Azure — filed the quota requests and the appeal, and chose Azure when it was the one that said yes.
+- **I ran the cloud accounts**: AWS, then GCP, then Azure, then Oracle Cloud and Vercel. I filed the quota requests and the appeal, chose Azure when it was the one that said yes, and chose Vercel for the frontend and Oracle for the API when the goal became a deployment that costs nothing.
 - **I decided when to stop spending.** After the review window I shut the GPU down, asked for a way to keep the app running for nothing, and asked for guardrails so that nobody could misuse the key or the deployment.
 - The assistant did most of the implementation under that direction — code, tests, deployment scripts — ran the evaluation sweeps, drafted the docs, and did the debugging legwork when something broke.
 
@@ -446,6 +469,8 @@ The working arrangement was that I owned the problem, the decisions and the acce
 | **Required-but-nullable fields in the grammar** | This was a fix to the assistant's own first design — see below — and it took the evaluation from 82.1 % to 100 % |
 | **Removing the endpoint that listed every batch** | Found while auditing for the guardrails I asked for. With no accounts, it let anyone read everyone's leads; the frontend never used it, so it went |
 | **Gemini's free tier through the existing client** | I asked whether Gemini's free version would work. Before answering, the assistant checked Gemini's OpenAI-compatible endpoint against the request the client already sends; it was a configuration change, and it then scored 100 % |
+| **Calling the API directly from the browser rather than through Vercel's proxy** | The proxy's limit on request size is not documented, and a full upload is about 15 MB. Proxied requests would also all come from Vercel's addresses, merging every visitor into one rate-limit bucket |
+| **A test that fails when a setting cannot reach the containers** | A new setting had been silently dropped by the compose file twice. The guard found fourteen more, including a worker concurrency the CPU deployment had never actually used |
 | **A daily ceiling on the hosted key, kept in the database** | Per-address limits cannot stop several addresses draining one quota, and an in-memory counter resets with the container |
 | **Self-hosting Swagger UI instead of loosening the Content-Security-Policy** | The demo recording showed the docs page blank in production. The assistant proposed vendoring the assets over relaxing the policy; that is the right instinct and it is what shipped |
 
@@ -464,7 +489,7 @@ The working arrangement was that I owned the problem, the decisions and the acce
 | **`gemini-2.5-flash` as the hosted model** | **Replaced after it failed.** It returns 404 to new accounts. The tier now takes a list of models and fails over, so the next retirement is a log line rather than an outage |
 | **An Excel summary that read "Flagged for review: 0"** while the sheet showed amber cells | **Fixed on my report.** I noticed the contradiction in the export; the count now looks at each field rather than each row |
 
-> The pattern across all of these is the same: the assistant is fast and usually right, and the times it was wrong were caught by looking at real output — a fabricated phone number, a skipped field, a blank docs page, a summary row that contradicted its own sheet, an endpoint that handed out everyone's leads. The measurement and the looking were my job, and they are the reason the numbers in this README can be trusted.
+> The pattern across all of these is the same: the assistant is fast and usually right, and the times it was wrong were caught by looking at real output — a fabricated phone number, a skipped field, a blank docs page, a summary row that contradicted its own sheet, an endpoint that handed out everyone's leads, a compression worker quietly fetching its code from a CDN. The measurement and the looking were my job, and they are the reason the numbers in this README can be trusted.
 
 ## Licence
 
