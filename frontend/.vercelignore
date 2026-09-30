@@ -1,0 +1,5 @@
+# Uploaded by `vercel deploy`; Vercel installs and builds from source itself.
+node_modules
+dist
+*.tsbuildinfo
+.env*

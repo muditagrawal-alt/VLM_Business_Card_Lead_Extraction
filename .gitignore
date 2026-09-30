@@ -57,3 +57,6 @@ logs/
 
 # Vendored at build time (make docs-assets locally).
 backend/app/static/swagger-ui/
+
+# Local link to the Vercel project (vercel link); machine-specific.
+.vercel/
