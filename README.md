@@ -61,7 +61,7 @@ Upload cards in bulk · extract seven structured fields per card · review and c
 
 ## Live deployment
 
-**<https://muditagrawal-lead-extraction.vercel.app>**. Free and open to anyone, with no login and no access code. Per-address limits and a daily ceiling on the hosted key bound what one visitor, or all of them together, can use; [Guardrails](#guardrails-on-the-public-url) has the details.
+**<https://muditagrawal-lead-extraction.vercel.app>**. Free to use, no sign-up.
 
 | | |
 |---|---|
@@ -407,7 +407,7 @@ pytest · pytest-asyncio · respx · aiosqlite · ruff · pyright · Vitest · T
 | **The free hosted tier is slower and less predictable than the GPU** | About one request in seven is shed, and the backoff puts the median at 16.6 s against 8.9 s on the T4 | A paid tier, or the GPU again when the AWS quota lands |
 | **Gemini's free tier may use submitted cards** to improve Google's products | The provider's free-tier terms | The paid tier, or the self-hosted tiers, for real contacts |
 | **The live API is one small ARM instance** | Always Free: 1 OCPU / 6 GB. On a free-tier account, Oracle may reclaim an instance that sits idle for a week | Upgrade the account to Pay As You Go, where Always Free resources stay free and are not reclaimed |
-| **No login** | Out of scope per the brief. The live demo is open to anyone, so per-address limits and the daily ceiling are what bound its use | Accounts, so a batch belongs to a person and limits follow the person rather than the address |
+| **No login** | Out of scope per the brief; per-address limits and a daily ceiling bound what the public demo can use | Accounts, so a batch belongs to a person and limits follow the person rather than the address |
 
 ### What I would do first
 
@@ -425,7 +425,6 @@ There are no accounts, so anything the URL exposes is exposed to whoever has the
 | Guardrail | What it stops |
 |---|---|
 | **No endpoint lists batches** | Reading other visitors' leads. A batch is reachable only by its id, an unguessable UUID the uploader's browser keeps. |
-| **Optional access code on upload, retry and delete** | Strangers spending inference or emptying the database. Compared in constant time and shareable as `/?code=…`. It gated the demo during the review; the demo is open now, and the rows below are what bound it. |
 | **Per-address limits** | One caller flooding the queue: batches per ten minutes and cards per hour. |
 | **A daily ceiling on the hosted key** | Many callers draining the quota together. Shared by every worker in PostgreSQL, so a restart does not reset it. |
 | **Cached health probes** | Using the public readiness endpoint to call the provider on the key. |
