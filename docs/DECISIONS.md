@@ -251,6 +251,12 @@ Rejected: accounts (out of scope, and friction for the reviewer), and an
 in-memory quota counter (per process, and reset by any restart — including
 one an abuser could provoke).
 
+After the review the code was switched off on the live demo, which is now
+free for anyone to use. The per-address limits and the daily ceiling are what
+bound it: the worst a determined caller can do is use up a day's quota, which
+pauses the demo until 00:00 UTC, and Gemini's free tier has no bill to run up.
+If that ever happens, the code is one setting away.
+
 ---
 
 ## 13. Gemini's free tier as the hosted model
